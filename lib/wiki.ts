@@ -2,13 +2,9 @@ import { fetchAllWikiFiles } from "./github";
 import { parsePage, buildSlugMap } from "./parser";
 import type { ParsedPage } from "./types";
 
-let cachedPages: ParsedPage[] | null = null;
-
 export async function getAllPages(): Promise<ParsedPage[]> {
-  if (cachedPages) return cachedPages;
   const files = await fetchAllWikiFiles();
-  cachedPages = files.map((f) => parsePage(f.path, f.content));
-  return cachedPages;
+  return files.map((f) => parsePage(f.path, f.content));
 }
 
 export async function getPage(slug: string): Promise<ParsedPage | null> {

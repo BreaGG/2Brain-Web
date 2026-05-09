@@ -3,7 +3,7 @@ import Link from "next/link";
 import { getAllPages, getPage } from "@/lib/wiki";
 import PageView from "@/components/wiki/PageView";
 
-export const revalidate = 3600;
+export const revalidate = 300;
 
 interface Props {
   params: Promise<{ slug: string[] }>;

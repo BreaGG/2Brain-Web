@@ -19,7 +19,7 @@ interface TreeEntry {
 export async function fetchWikiTree(): Promise<TreeEntry[]> {
   const res = await fetch(
     `${API}/repos/${OWNER}/${REPO}/git/trees/HEAD?recursive=1`,
-    { headers, next: { revalidate: 3600, tags: ["wiki"] } }
+    { headers, next: { revalidate: 300, tags: ["wiki"] } }
   );
   if (!res.ok) throw new Error(`GitHub tree fetch failed: ${res.status}`);
   const data = await res.json();
@@ -31,7 +31,7 @@ export async function fetchWikiTree(): Promise<TreeEntry[]> {
 export async function fetchFileContent(path: string): Promise<string> {
   const res = await fetch(
     `${API}/repos/${OWNER}/${REPO}/contents/${encodeURIComponent(path)}`,
-    { headers, next: { revalidate: 3600, tags: ["wiki"] } }
+    { headers, next: { revalidate: 300, tags: ["wiki"] } }
   );
   if (!res.ok) throw new Error(`GitHub file fetch failed: ${path} ${res.status}`);
   const data = await res.json();
@@ -41,7 +41,7 @@ export async function fetchFileContent(path: string): Promise<string> {
 export async function fetchBlobContent(sha: string): Promise<string> {
   const res = await fetch(
     `${API}/repos/${OWNER}/${REPO}/git/blobs/${sha}`,
-    { headers, next: { revalidate: 3600, tags: ["wiki"] } }
+    { headers, next: { revalidate: 300, tags: ["wiki"] } }
   );
   if (!res.ok) throw new Error(`GitHub blob fetch failed: ${sha} ${res.status}`);
   const data = await res.json();
