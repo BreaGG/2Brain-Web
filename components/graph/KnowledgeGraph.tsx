@@ -466,6 +466,7 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
           ))}
 
           {/* ── Edges ── */}
+          {/* Rules: core→section visible | section→leaf visible | everything else hidden */}
           {filteredEdges.map((e, i) => {
             const srcId = typeof e.source === "string" ? e.source : (e.source as GraphNode).id;
             const tgtId = typeof e.target === "string" ? e.target : (e.target as GraphNode).id;
@@ -473,29 +474,59 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
             const tgt = positions.get(tgtId);
             if (!src || !tgt) return null;
 
-            const sc = nodeClass(srcId); const tc = nodeClass(tgtId);
-            const isSpinal    = sc === "core" || tc === "core";
-            const isSectional = !isSpinal && (sc === "section" || tc === "section");
-            const connected   = hoveredNode && (hoveredNode.id === srcId || hoveredNode.id === tgtId);
-            const dimmed      = hoveredNode && !connected;
+            const sc = nodeClass(srcId);
+            const tc = nodeClass(tgtId);
 
-            let edgeColor = "#1a1a2e";
-            if (connected)        edgeColor = e.broken ? "#ef4444" : "#7fc8ff";
-            else if (isSpinal) {
+            // Only render:
+            //   1. core → section   (spinal)
+            //   2. section → leaf   (sectional)
+            //   3. concept ↔ source-summary  (conceptual link)
+            const isSpinal    = (sc === "core" && tc === "section") || (tc === "core" && sc === "section");
+            const isSectional = !isSpinal && ((sc === "section" && (tc === "leaf" || tc === "ghost")) ||
+                                              (tc === "section" && (sc === "leaf" || sc === "ghost")));
+
+            // look up node types for conceptual link check
+            const srcNode = filteredNodes.find((n) => n.id === srcId);
+            const tgtNode = filteredNodes.find((n) => n.id === tgtId);
+            const isConceptual = !isSpinal && !isSectional &&
+              sc === "leaf" && tc === "leaf" &&
+              !!srcNode && !!tgtNode && (
+                (srcNode.type === "concept" && tgtNode.type === "source-summary") ||
+                (srcNode.type === "source-summary" && tgtNode.type === "concept")
+              );
+
+            if (!isSpinal && !isSectional && !isConceptual) return null;
+
+            const connected = hoveredNode && (hoveredNode.id === srcId || hoveredNode.id === tgtId);
+            const dimmed    = hoveredNode && !connected;
+
+            // Derive domain color from section node involved
+            let domainColor = "#4f9cf9";
+            if (isSpinal) {
               const sid = sc === "core" ? tgtId : srcId;
-              edgeColor = (DOMAIN_COLORS[sid.split("/")[0]] ?? "#4f9cf9");
+              domainColor = DOMAIN_COLORS[sid.split("/")[0]] ?? domainColor;
             } else if (isSectional) {
               const sid = sc === "section" ? srcId : tgtId;
-              edgeColor = (DOMAIN_COLORS[sid.split("/")[0]] ?? "#4f9cf9") + "55";
+              domainColor = DOMAIN_COLORS[sid.split("/")[0]] ?? domainColor;
+            } else if (isConceptual) {
+              domainColor = DOMAIN_COLORS[srcNode!.domain[0]] ?? domainColor;
             }
+
+            const edgeColor = connected
+              ? (e.broken ? "#ef4444" : "#7fc8ff")
+              : isSpinal
+                ? domainColor
+                : isConceptual
+                  ? domainColor + "99"
+                  : domainColor + "55";
 
             return (
               <line key={i}
                 x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
                 stroke={edgeColor}
-                strokeWidth={isSpinal ? 1.2 : isSectional ? 0.9 : 0.6}
-                strokeDasharray={e.broken ? "4 3" : undefined}
-                opacity={dimmed ? 0 : connected ? 0.9 : isSpinal ? 0.55 : isSectional ? 0.35 : 0.22}
+                strokeWidth={isSpinal ? 1.2 : isConceptual ? 0.9 : 0.7}
+                strokeDasharray={e.broken ? "4 3" : isConceptual ? "2 4" : undefined}
+                opacity={dimmed ? 0 : connected ? 0.9 : isSpinal ? 0.55 : isConceptual ? 0.45 : 0.28}
               />
             );
           })}
