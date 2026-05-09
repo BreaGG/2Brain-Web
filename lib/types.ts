@@ -30,6 +30,8 @@ export interface GraphNode {
   broken?: boolean; // referenced but no page exists
   x?: number;
   y?: number;
+  vx?: number;
+  vy?: number;
   fx?: number | null;
   fy?: number | null;
 }

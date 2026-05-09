@@ -24,21 +24,50 @@ export default async function WikiPage({ params }: Props) {
 
   return (
     <div className="min-h-full" style={{ backgroundColor: "var(--bg-primary)" }}>
-      {/* Minimal nav bar */}
+      {/* Nav bar */}
       <header
-        className="h-12 flex items-center gap-4 px-4 border-b sticky top-0 z-10"
-        style={{ borderColor: "var(--border)", backgroundColor: "var(--bg-secondary)", backdropFilter: "blur(8px)" }}
+        style={{
+          height: 48,
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          padding: "0 20px",
+          borderBottom: "1px solid #111",
+          background: "#000",
+          position: "sticky",
+          top: 0,
+          zIndex: 10,
+          backdropFilter: "blur(8px)",
+        }}
       >
-        <Link href="/" className="flex items-center gap-2 font-semibold text-sm" style={{ color: "var(--text-primary)" }}>
-          <span style={{ color: "var(--node-concept)" }}>⬡</span>
+        <Link
+          href="/"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 7,
+            textDecoration: "none",
+            color: "#fff",
+            fontWeight: 600,
+            fontSize: 13,
+            flexShrink: 0,
+          }}
+        >
+          <span style={{ color: "#4f9cf9" }}>⬡</span>
           2Brain
         </Link>
-        <span style={{ color: "var(--text-muted)" }}>/</span>
-        <span className="text-sm truncate" style={{ color: "var(--text-muted)" }}>
-          {page.domain[0]}
-        </span>
-        <span style={{ color: "var(--text-muted)" }}>/</span>
-        <span className="text-sm font-medium truncate" style={{ color: "var(--text-primary)" }}>
+        <span style={{ color: "#27272a", fontSize: 14 }}>/</span>
+        <span style={{ color: "#52525b", fontSize: 13 }}>{page.domain[0]}</span>
+        <span style={{ color: "#27272a", fontSize: 14 }}>/</span>
+        <span
+          style={{
+            color: "#a1a1aa",
+            fontSize: 13,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
           {page.title}
         </span>
       </header>
