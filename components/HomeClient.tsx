@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import type { ParsedPage, GraphData } from "@/lib/types";
 import GraphControls from "@/components/graph/GraphControls";
@@ -24,10 +24,20 @@ const LEGEND = [
   { label: "synthesis", color: "#c084fc" },
 ];
 
+const MOBILE_BREAKPOINT = 768;
+
 export default function HomeClient({ pages, graphData, allDomains }: Props) {
   const [view, setView]               = useState<"graph" | "list">("graph");
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set());
   const [searchOpen, setSearchOpen]   = useState(false);
+  const [isMobile, setIsMobile]       = useState(false);
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
 
   function toggleDomain(d: string) {
     setActiveDomains((prev) => {
@@ -44,6 +54,16 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
     (p) => activeDomains.size === 0 || p.domain.some((d) => activeDomains.has(d))
   ).length;
 
+  /* ── MOBILE LAYOUT: only the sphere ── */
+  if (isMobile) {
+    return (
+      <div style={{ height: "100%", width: "100%", background: "#000", overflow: "hidden" }}>
+        <KnowledgeGraph data={graphData} activeDomains={activeDomains} />
+      </div>
+    );
+  }
+
+  /* ── DESKTOP LAYOUT ── */
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#000" }}>
       <Navbar view={view} onViewChange={setView} onSearchOpen={() => setSearchOpen(true)} />
@@ -145,7 +165,7 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
 
           {/* Hints */}
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {[["scroll", "zoom"], ["drag", "pan"], ["click", "open"]].map(([action, hint]) => (
+            {[["scroll", "zoom"], ["drag", "rotate"], ["click", "open"]].map(([action, hint]) => (
               <span key={action} style={{
                 display: "flex", alignItems: "center", gap: 5,
                 fontSize: 10, letterSpacing: "0.04em", fontFamily: "monospace",

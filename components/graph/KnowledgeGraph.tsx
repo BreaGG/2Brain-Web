@@ -352,10 +352,11 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
     return map;
   }, [filteredNodes]);
 
-  /* Geometry */
-  const cx = dims.w * 0.40;
+  /* Geometry — center sphere when no side panel (mobile/narrow) */
+  const isNarrow = dims.w < 900;
+  const cx = isNarrow ? dims.w * 0.5 : dims.w * 0.40;
   const cy = dims.h * 0.5;
-  const sphereR = Math.min(dims.w, dims.h) * 0.36;
+  const sphereR = Math.min(dims.w, dims.h) * (isNarrow ? 0.40 : 0.36);
   cxRef.current = cx;
   cyRef.current = cy;
   sphereRRef.current = sphereR;
