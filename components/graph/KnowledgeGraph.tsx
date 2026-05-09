@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useMemo, useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import * as d3 from "d3";
 import type { GraphData, GraphNode, GraphEdge } from "@/lib/types";
@@ -36,102 +36,182 @@ const TYPE_COLORS: Record<string, string> = {
   page:             "#5a6080",
   meta:             "#5a6080",
 };
-
 function leafColor(node: GraphNode): string {
-  const dc = DOMAIN_COLORS[node.domain[0]];
-  return dc ?? TYPE_COLORS[node.type] ?? "#5a6080";
+  return DOMAIN_COLORS[node.domain[0]] ?? TYPE_COLORS[node.type] ?? "#5a6080";
 }
-
-/* ── Radii ── */
 function nodeRadius(node: GraphNode): number {
   const cls = nodeClass(node.id, node.broken);
-  if (cls === "core")    return 20;
-  if (cls === "section") return 10 + Math.log(node.degree + 1) * 2;
-  return 4 + Math.log(node.degree + 1) * 3.5;
+  if (cls === "core")    return 22;
+  if (cls === "section") return 11 + Math.log(node.degree + 1) * 2;
+  return 4 + Math.log(node.degree + 1) * 3.4;
 }
 
-/* ── Section orbital positions ── */
-const SECTION_ANGLES: Record<string, number> = {
-  research: -Math.PI / 2,
-  reading:   0,
-  business:  Math.PI / 2,
-  personal:  Math.PI,
+/* ── Sphere geometry ── */
+const SECTION_SPHERICAL: Record<string, { theta: number; phi: number }> = {
+  research: { theta: 0,                phi: Math.PI / 3      },
+  reading:  { theta: Math.PI / 2,      phi: 2 * Math.PI / 3  },
+  business: { theta: Math.PI,          phi: Math.PI / 3      },
+  personal: { theta: 3 * Math.PI / 2,  phi: 2 * Math.PI / 3  },
 };
-const SECTION_ORBIT_R = 170;
 
-/* ── Galaxy dot generator (deterministic) ── */
-function galaxyDots(seed: number, count: number, maxR: number) {
-  return Array.from({ length: count }, (_, i) => {
-    const h1 = Math.abs(Math.sin((seed + i * 7) * 127.1 + 1.3) * 43758.5453);
-    const h2 = Math.abs(Math.sin((seed + i * 7) * 311.7 + 5.7) * 43758.5453);
-    const h3 = Math.abs(Math.sin((seed + i * 7) * 73.1  + 2.1) * 43758.5453);
-    const h4 = Math.abs(Math.sin((seed + i * 7) * 47.3  + 9.9) * 43758.5453);
-    const angle = (h1 - Math.floor(h1)) * 2 * Math.PI;
-    const dist  = Math.sqrt(h2 - Math.floor(h2)) * maxR;
-    return {
-      x:   Math.cos(angle) * dist,
-      y:   Math.sin(angle) * dist,
-      r:   (h3 - Math.floor(h3)) * 0.9 + 0.15,
-      o:   (h4 - Math.floor(h4)) * 0.55 + 0.08,
-      dur: 2.5 + (h1 - Math.floor(h1)) * 4,
-    };
-  });
+/* ── Galaxy generator (reduced for perf) ── */
+interface GalaxyDot {
+  x: number; y: number; r: number; o: number;
+  layer: "arm" | "bulge" | "halo" | "dust" | "hotspot";
+}
+function frac(v: number) { return v - Math.floor(v); }
+function hash(n: number) { return frac(Math.abs(Math.sin(n) * 43758.5453)); }
+
+function spiralGalaxy(seed: number, opts: {
+  arms: number; totalDots: number;
+  maxR: number; logSpiralB: number; tilt: number; armWidth: number;
+}): GalaxyDot[] {
+  const dots: GalaxyDot[] = [];
+  const { arms, totalDots, maxR, logSpiralB, tilt, armWidth } = opts;
+  const armCount   = Math.floor(totalDots * 0.42);
+  const bulgeCount = Math.floor(totalDots * 0.25);
+  const haloCount  = Math.floor(totalDots * 0.18);
+  const dustCount  = Math.floor(totalDots * 0.10);
+  const hotCount   = Math.floor(totalDots * 0.05);
+
+  for (let a = 0; a < arms; a++) {
+    const armPhase = (a / arms) * Math.PI * 2;
+    for (let i = 0; i < Math.floor(armCount / arms); i++) {
+      const t = hash(seed + a * 3000 + i * 7.1);
+      const rawDist = Math.pow(t, 0.6) * maxR;
+      const spiralAngle = armPhase + Math.log(rawDist / 8 + 1) / logSpiralB;
+      const spreadMag = (hash(seed + a * 3000 + i * 31.3) - 0.5) * armWidth * (0.4 + t * 0.8);
+      const nx = -Math.sin(spiralAngle), ny = Math.cos(spiralAngle);
+      const px = Math.cos(spiralAngle) * rawDist + nx * spreadMag;
+      const py = (Math.sin(spiralAngle) * rawDist + ny * spreadMag) * tilt;
+      const brightness = Math.exp(-rawDist / (maxR * 0.6));
+      dots.push({
+        x: px, y: py,
+        r: (hash(seed + a * 3000 + i * 13.7) * 0.7 + 0.3) * (1.4 - t * 0.5),
+        o: (hash(seed + a * 3000 + i * 47.3) * 0.25 + 0.10) * brightness + 0.04,
+        layer: "arm",
+      });
+    }
+  }
+  for (let i = 0; i < bulgeCount; i++) {
+    const angle = hash(seed + 6000 + i * 37.1) * Math.PI * 2;
+    const r1 = hash(seed + 6000 + i * 73.3);
+    const r2 = hash(seed + 6000 + i * 97.1);
+    const r3 = hash(seed + 6000 + i * 53.7);
+    const gaussDist = ((r1 + r2 + r3) / 3) * maxR * 0.35;
+    dots.push({
+      x: Math.cos(angle) * gaussDist,
+      y: Math.sin(angle) * gaussDist * tilt * 0.85,
+      r: hash(seed + 6000 + i * 11.7) * 1.6 + 0.5,
+      o: Math.exp(-gaussDist / (maxR * 0.15)) * 0.40 + 0.04,
+      layer: "bulge",
+    });
+  }
+  for (let i = 0; i < haloCount; i++) {
+    const angle = hash(seed + 9000 + i * 19.7) * Math.PI * 2;
+    const dist = (0.4 + hash(seed + 9000 + i * 53.1) * 0.65) * maxR;
+    dots.push({
+      x: Math.cos(angle) * dist,
+      y: Math.sin(angle) * dist * tilt * 0.9,
+      r: hash(seed + 9000 + i * 31.3) * 0.4 + 0.1,
+      o: hash(seed + 9000 + i * 67.9) * 0.07 + 0.02,
+      layer: "halo",
+    });
+  }
+  for (let i = 0; i < dustCount; i++) {
+    const t = hash(seed + 12000 + i * 29.3);
+    const dist = Math.pow(t, 0.5) * maxR * 0.75;
+    const betweenAngle = hash(seed + 12000 + i * 61.7) * Math.PI * 2;
+    dots.push({
+      x: Math.cos(betweenAngle) * dist,
+      y: Math.sin(betweenAngle) * dist * tilt,
+      r: hash(seed + 12000 + i * 17.1) * 2.2 + 1.0,
+      o: hash(seed + 12000 + i * 41.3) * 0.04 + 0.01,
+      layer: "dust",
+    });
+  }
+  for (let i = 0; i < hotCount; i++) {
+    const armIdx = Math.floor(hash(seed + 15000 + i * 7) * arms);
+    const armPhase = (armIdx / arms) * Math.PI * 2;
+    const t = 0.2 + hash(seed + 15000 + i * 43.3) * 0.5;
+    const dist = t * maxR;
+    const angle = armPhase + Math.log(dist / 8 + 1) / logSpiralB;
+    dots.push({
+      x: Math.cos(angle) * dist,
+      y: Math.sin(angle) * dist * tilt,
+      r: hash(seed + 15000 + i * 19.1) * 1.8 + 0.9,
+      o: hash(seed + 15000 + i * 57.3) * 0.45 + 0.25,
+      layer: "hotspot",
+    });
+  }
+  return dots;
 }
 
-const CORE_DOTS = galaxyDots(0,   90, 110);
-const SEC_DOTS: Record<string, ReturnType<typeof galaxyDots>> = {
-  research: galaxyDots(100, 45, 72),
-  personal: galaxyDots(200, 45, 72),
-  reading:  galaxyDots(300, 45, 72),
-  business: galaxyDots(400, 45, 72),
+/* Reduced counts: 380 core + 4×180 sec = ~1100 (was 4200) */
+const CORE_GALAXY = spiralGalaxy(0, {
+  arms: 4, totalDots: 380, maxR: 200, logSpiralB: 0.38, tilt: 0.42, armWidth: 32,
+});
+const SEC_GALAXIES: Record<string, GalaxyDot[]> = {
+  research: spiralGalaxy(100, { arms: 3, totalDots: 180, maxR: 130, logSpiralB: 0.42, tilt: 0.48, armWidth: 22 }),
+  personal: spiralGalaxy(200, { arms: 2, totalDots: 180, maxR: 130, logSpiralB: 0.30, tilt: 0.55, armWidth: 26 }),
+  reading:  spiralGalaxy(300, { arms: 3, totalDots: 180, maxR: 130, logSpiralB: 0.40, tilt: 0.45, armWidth: 20 }),
+  business: spiralGalaxy(400, { arms: 4, totalDots: 180, maxR: 130, logSpiralB: 0.34, tilt: 0.50, armWidth: 24 }),
+};
+const SEC_TILT_ANGLES: Record<string, number> = {
+  research: -15, personal: 25, reading: -35, business: 10,
+};
+const CORE_ROTATION_SPEED = 240;
+const SEC_ROTATION_SPEEDS: Record<string, number> = {
+  research: 180, personal: 210, reading: 165, business: 195,
 };
 
 /* ── Background starfield ── */
-const STARS = Array.from({ length: 120 }, (_, i) => {
-  const h1 = Math.abs(Math.sin(i * 127.1 + 1.3) * 43758.5453);
-  const h2 = Math.abs(Math.sin(i * 311.7 + 5.7) * 43758.5453);
-  const h3 = Math.abs(Math.sin(i * 73.1  + 2.1) * 43758.5453);
-  const h4 = Math.abs(Math.sin(i * 47.3  + 9.9) * 43758.5453);
+const STARS = Array.from({ length: 100 }, (_, i) => {
+  const h1 = hash(i * 127.1 + 1.3);
+  const h2 = hash(i * 311.7 + 5.7);
+  const h3 = hash(i * 73.1  + 2.1);
+  const h4 = hash(i * 47.3  + 9.9);
   return {
-    x:    (h1 - Math.floor(h1)) * 100,
-    y:    (h2 - Math.floor(h2)) * 100,
-    r:    (h3 - Math.floor(h3)) * 1.0 + 0.3,
-    o:    (h4 - Math.floor(h4)) * 0.16 + 0.03,
-    dur:  2 + (h1 - Math.floor(h1)) * 4,
+    x: h1 * 100, y: h2 * 100,
+    r: h3 * 1.0 + 0.3,
+    o: h4 * 0.20 + 0.04,
     blue: i % 5 === 0,
   };
 });
 
+/* ── Sphere rotation ── */
+const ROTATION_SPEED = 0.0024;
+const DRAG_SENSITIVITY = 0.006; // rad per pixel
+
 /* ── Component ── */
 export default function KnowledgeGraph({ data, activeDomains }: Props) {
-  const svgRef      = useRef<SVGSVGElement>(null);
-  const gRef        = useRef<SVGGElement>(null);
-  const simRef      = useRef<d3.Simulation<GraphNode, GraphEdge> | null>(null);
-  const simNodesRef = useRef<GraphNode[]>([]);
-  const rotationRef = useRef<number>(0);
-  const router      = useRouter();
+  const svgRef = useRef<SVGSVGElement>(null);
+  const gRef   = useRef<SVGGElement>(null);
+  const router = useRouter();
 
-  const [positions,    setPositions]    = useState<Map<string, { x: number; y: number }>>(new Map());
-  const [hoveredNode,  setHoveredNode]  = useState<GraphNode | null>(null);
-  const [tooltipPos,   setTooltipPos]   = useState({ x: 0, y: 0 });
-  const [dims,         setDims]         = useState({ w: 800, h: 600 });
-  const [zoomScale,    setZoomScale]    = useState(1);
+  const [dims,        setDims]        = useState({ w: 800, h: 600 });
+  const [zoomScale,   setZoomScale]   = useState(1);
+  const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
+  const [tooltipPos,  setTooltipPos]  = useState({ x: 0, y: 0 });
 
-  const dragRef = useRef<{ nodeId: string } | null>(null);
+  /* Animation refs (no React state for rotation) */
+  const rotationRef    = useRef(0);
+  const pausedRef      = useRef(false);
+  const dragRef        = useRef<{ startX: number; startRot: number } | null>(null);
+  const hoveredIdRef   = useRef<string | null>(null);
+  const neighborSetRef = useRef<Set<string>>(new Set());
 
-  const filteredNodes = data.nodes.filter(
-    (n) => activeDomains.size === 0 || n.broken ||
-           nodeClass(n.id) === "core" || nodeClass(n.id) === "section" ||
-           n.domain.some((d) => activeDomains.has(d))
-  );
-  const filteredIds   = new Set(filteredNodes.map((n) => n.id));
-  const filteredEdges = data.edges.filter((e) => {
-    const src = typeof e.source === "string" ? e.source : (e.source as GraphNode).id;
-    const tgt = typeof e.target === "string" ? e.target : (e.target as GraphNode).id;
-    return filteredIds.has(src) && filteredIds.has(tgt);
-  });
+  /* Geometry refs (for use inside rAF) */
+  const cxRef      = useRef(0);
+  const cyRef      = useRef(0);
+  const sphereRRef = useRef(0);
 
-  /* Resize */
+  /* DOM element refs */
+  const nodeElRefs   = useRef(new Map<string, SVGGElement>());
+  const edgeElRefs   = useRef(new Map<string, SVGLineElement>());
+  const galaxyElRefs = useRef(new Map<string, SVGGElement>());
+
+  /* Resize observer */
   useEffect(() => {
     const svg = svgRef.current;
     if (!svg?.parentElement) return;
@@ -144,12 +224,17 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  /* D3 zoom — once, tracks scale */
+  /* D3 zoom (pan + zoom) */
   useEffect(() => {
     if (!svgRef.current || !gRef.current) return;
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
-      .scaleExtent([0.06, 10])
+      .scaleExtent([0.3, 6])
+      .filter((event) => {
+        // Disable pan/zoom drag — we own pointer drag for rotation
+        if (event.type === "wheel") return true;
+        return false;
+      })
       .on("zoom", (e) => {
         d3.select(gRef.current).attr("transform", e.transform.toString());
         setZoomScale(e.transform.k);
@@ -157,173 +242,288 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
     d3.select(svgRef.current).call(zoom);
   }, []);
 
-  /* ── Simulation ── */
-  useEffect(() => {
-    simRef.current?.stop();
-
-    const nodes: GraphNode[] = filteredNodes.map((n) => ({ ...n }));
-    const edges = filteredEdges.map((e) => ({
-      source: typeof e.source === "string" ? e.source : (e.source as GraphNode).id,
-      target: typeof e.target === "string" ? e.target : (e.target as GraphNode).id,
-      broken: e.broken,
-    }));
-
-    simNodesRef.current = nodes;
-
-    const cx = dims.w * 0.40;
-    const cy = dims.h / 2;
-
-    /* Fix core */
-    const coreNode = nodes.find((n) => n.id === "index");
-    if (coreNode) {
-      coreNode.x = cx; coreNode.y = cy;
-      coreNode.fx = cx; coreNode.fy = cy;
-    }
-
-    const sim = d3
-      .forceSimulation<GraphNode>(nodes)
-      .alphaDecay(0)
-      .velocityDecay(0.48)
-      .alpha(0.08)
-      .force(
-        "link",
-        d3.forceLink<GraphNode, { source: string; target: string; broken: boolean }>(edges)
-          .id((d) => d.id)
-          .distance((e) => {
-            const s = typeof e.source === "object" ? (e.source as GraphNode).id : e.source;
-            const t = typeof e.target === "object" ? (e.target as GraphNode).id : e.target;
-            const sc = nodeClass(s); const tc = nodeClass(t);
-            if (sc === "core"    || tc === "core")    return SECTION_ORBIT_R * 0.9;
-            if (sc === "section" || tc === "section") return 110;
-            return 75;
-          })
-          .strength(0.35)
-      )
-      .force("charge", d3.forceManyBody().strength(-180).distanceMax(300))
-      .force("collision", d3.forceCollide<GraphNode>().radius((d) => nodeRadius(d) + 10))
-      .force("orbital", () => {
-        for (const node of nodes) {
-          if (node.fx != null) continue;
-          const dx = (node.x ?? 0) - cx;
-          const dy = (node.y ?? 0) - cy;
-          const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-          const cls  = nodeClass(node.id, node.broken);
-          const base = cls === "section" ? 0.10 : 0.18;
-          const speed = base / Math.max(dist / 180, 0.5);
-          node.vx = (node.vx ?? 0) + (-dy / dist) * speed;
-          node.vy = (node.vy ?? 0) + (dx  / dist) * speed;
-        }
-      })
-      .force("section-orbit", () => {
-        const sections = nodes.filter((n) => n.id.endsWith("/index") && n.id !== "index");
-        const step = (2 * Math.PI) / Math.max(sections.length, 1);
-        sections.forEach((node, i) => {
-          const domain = node.id.split("/")[0];
-          const angle  = SECTION_ANGLES[domain] ?? i * step;
-          const tx = cx + Math.cos(angle) * SECTION_ORBIT_R;
-          const ty = cy + Math.sin(angle) * SECTION_ORBIT_R;
-          node.vx = (node.vx ?? 0) + (tx - (node.x ?? 0)) * 0.07;
-          node.vy = (node.vy ?? 0) + (ty - (node.y ?? 0)) * 0.07;
-        });
-      })
-      .force("galaxy-cluster", () => {
-        const sectionPos: Record<string, { x: number; y: number }> = {};
-        for (const node of nodes) {
-          if (node.id.endsWith("/index") && node.id !== "index") {
-            sectionPos[node.id.split("/")[0]] = { x: node.x ?? cx, y: node.y ?? cy };
-          }
-        }
-        for (const node of nodes) {
-          if (node.fx != null || node.id.endsWith("/index")) continue;
-          const target = sectionPos[node.domain[0]];
-          if (!target) continue;
-          const strength = node.broken ? 0.006 : 0.025;
-          node.vx = (node.vx ?? 0) + (target.x - (node.x ?? 0)) * strength;
-          node.vy = (node.vy ?? 0) + (target.y - (node.y ?? 0)) * strength;
-        }
-      });
-
-    sim.on("tick", () => {
-      rotationRef.current += 0.0012;
-      const angle = rotationRef.current;
-      const cos = Math.cos(angle), sin = Math.sin(angle);
-      setPositions(
-        new Map(nodes.map((n) => {
-          const dx = (n.x ?? 0) - cx;
-          const dy = (n.y ?? 0) - cy;
-          return [n.id, { x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos }];
-        }))
-      );
-    });
-
-    simRef.current = sim;
-    return () => { sim.stop(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filteredNodes.length, filteredEdges.length, dims]);
-
-  /* Drag */
-  const onNodePointerDown = useCallback((e: React.PointerEvent, nodeId: string) => {
-    if (nodeId === "index") return;
-    e.preventDefault(); e.stopPropagation();
-    dragRef.current = { nodeId };
-    (e.target as Element).setPointerCapture(e.pointerId);
-    simRef.current?.alphaTarget(0.3).restart();
-  }, []);
-
-  const onSvgPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragRef.current) return;
-    const node = simNodesRef.current.find((n) => n.id === dragRef.current!.nodeId);
-    if (!node || !svgRef.current) return;
-    const pt = svgRef.current.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    const matrix = gRef.current
-      ? (gRef.current as SVGGraphicsElement).getScreenCTM()?.inverse()
-      : null;
-    const local = matrix ? pt.matrixTransform(matrix) : pt;
-    const cx = dims.w * 0.40, cy = dims.h / 2;
-    const cos = Math.cos(rotationRef.current), sin = Math.sin(rotationRef.current);
-    const dx = local.x - cx, dy = local.y - cy;
-    node.fx = cx + dx * cos + dy * sin;
-    node.fy = cy - dx * sin + dy * cos;
-  }, [dims]);
-
-  const onSvgPointerUp = useCallback(() => {
-    if (!dragRef.current) return;
-    const node = simNodesRef.current.find((n) => n.id === dragRef.current!.nodeId);
-    if (node) { node.fx = null; node.fy = null; }
-    simRef.current?.alphaTarget(0);
-    dragRef.current = null;
-  }, []);
-
-  const neighborIds = useCallback((nodeId: string): Set<string> => {
-    const ids = new Set<string>();
-    for (const e of filteredEdges) {
-      const src = typeof e.source === "string" ? e.source : (e.source as GraphNode).id;
-      const tgt = typeof e.target === "string" ? e.target : (e.target as GraphNode).id;
-      if (src === nodeId) ids.add(tgt);
-      if (tgt === nodeId) ids.add(src);
-    }
-    return ids;
-  }, [filteredEdges]);
-
-  const gcx = dims.w * 0.40;
-  const gcy = dims.h / 2;
-
-  /* Section nodes in current frame */
-  const sectionNodes = filteredNodes.filter(
-    (n) => n.id.endsWith("/index") && n.id !== "index"
+  /* Filtered data */
+  const filteredNodes = useMemo(
+    () => data.nodes.filter(n =>
+      activeDomains.size === 0 || n.broken ||
+      nodeClass(n.id) === "core" || nodeClass(n.id) === "section" ||
+      n.domain.some(d => activeDomains.has(d))
+    ),
+    [data.nodes, activeDomains]
+  );
+  const filteredIds = useMemo(
+    () => new Set(filteredNodes.map(n => n.id)),
+    [filteredNodes]
+  );
+  const filteredEdges = useMemo(
+    () => data.edges.filter(e => {
+      const s = typeof e.source === "string" ? e.source : (e.source as GraphNode).id;
+      const t = typeof e.target === "string" ? e.target : (e.target as GraphNode).id;
+      return filteredIds.has(s) && filteredIds.has(t);
+    }),
+    [data.edges, filteredIds]
   );
 
+  /* Filter edges by visibility rules */
+  interface ProcessedEdge {
+    e: GraphEdge; sId: string; tId: string;
+    isSpinal: boolean; isConceptual: boolean;
+    color: string; baseOpacity: number;
+    strokeWidth: number; dashArray: string | undefined;
+    key: string;
+  }
+  const processedEdges = useMemo<ProcessedEdge[]>(() => {
+    const out: ProcessedEdge[] = [];
+    const nodeMap = new Map(filteredNodes.map(n => [n.id, n]));
+    for (const e of filteredEdges) {
+      const sId = typeof e.source === "string" ? e.source : (e.source as GraphNode).id;
+      const tId = typeof e.target === "string" ? e.target : (e.target as GraphNode).id;
+      const sNode = nodeMap.get(sId);
+      const tNode = nodeMap.get(tId);
+      if (!sNode || !tNode) continue;
+      const sc = nodeClass(sId), tc = nodeClass(tId);
+      const isSpinal    = (sc === "core" && tc === "section") || (tc === "core" && sc === "section");
+      const isSectional = !isSpinal && (
+        (sc === "section" && (tc === "leaf" || tc === "ghost")) ||
+        (tc === "section" && (sc === "leaf" || sc === "ghost"))
+      );
+      const isConceptual = !isSpinal && !isSectional &&
+        sc === "leaf" && tc === "leaf" && (
+          (sNode.type === "concept" && tNode.type === "source-summary") ||
+          (sNode.type === "source-summary" && tNode.type === "concept")
+        );
+      if (!isSpinal && !isSectional && !isConceptual) continue;
+
+      const sectionId = isSpinal
+        ? (sc === "core" ? tId : sId)
+        : isConceptual
+          ? sId
+          : (sc === "section" ? sId : tId);
+      const dom = sectionId.split("/")[0];
+      const domainColor = DOMAIN_COLORS[dom] ?? DOMAIN_COLORS[sNode.domain[0]] ?? "#4f9cf9";
+      const color = isSpinal ? domainColor : isConceptual ? domainColor + "99" : domainColor + "55";
+      const baseOp = isSpinal ? 0.55 : isConceptual ? 0.45 : 0.28;
+      out.push({
+        e, sId, tId,
+        isSpinal, isConceptual,
+        color, baseOpacity: baseOp,
+        strokeWidth: isSpinal ? 1.2 : isConceptual ? 0.9 : 0.7,
+        dashArray: e.broken ? "4 3" : isConceptual ? "2 4" : undefined,
+        key: `${sId}__${tId}`,
+      });
+    }
+    return out;
+  }, [filteredEdges, filteredNodes]);
+
+  /* Spherical positions */
+  const sphericalPositions = useMemo(() => {
+    const map = new Map<string, { theta: number; phi: number; isCore: boolean }>();
+    const sectionLeaves: Record<string, GraphNode[]> = {};
+    for (const n of filteredNodes) {
+      if (n.id === "index") {
+        map.set(n.id, { theta: 0, phi: 0, isCore: true });
+        continue;
+      }
+      if (n.id.endsWith("/index")) {
+        const dom = n.id.split("/")[0];
+        const sp = SECTION_SPHERICAL[dom] ?? { theta: 0, phi: Math.PI / 2 };
+        map.set(n.id, { ...sp, isCore: false });
+        continue;
+      }
+      const dom = n.domain[0] ?? "research";
+      if (!sectionLeaves[dom]) sectionLeaves[dom] = [];
+      sectionLeaves[dom].push(n);
+    }
+    for (const [dom, leaves] of Object.entries(sectionLeaves)) {
+      const sp = SECTION_SPHERICAL[dom] ?? { theta: 0, phi: Math.PI / 2 };
+      const sinPhi = Math.max(Math.sin(sp.phi), 0.3);
+      leaves.forEach((n, i) => {
+        const seedBase = i * 73.13 + dom.length * 17.3;
+        const a = hash(seedBase) * Math.PI * 2;
+        const r = 0.30 + hash(seedBase + 7.7) * 0.50;
+        const newPhi = sp.phi + r * Math.sin(a);
+        map.set(n.id, {
+          theta: sp.theta + (r * Math.cos(a)) / sinPhi,
+          phi: Math.max(0.20, Math.min(Math.PI - 0.20, newPhi)),
+          isCore: false,
+        });
+      });
+    }
+    return map;
+  }, [filteredNodes]);
+
+  /* Geometry */
+  const cx = dims.w * 0.40;
+  const cy = dims.h * 0.5;
+  const sphereR = Math.min(dims.w, dims.h) * 0.36;
+  cxRef.current = cx;
+  cyRef.current = cy;
+  sphereRRef.current = sphereR;
+
+  /* Refs to data for rAF */
+  const filteredNodesRef    = useRef(filteredNodes);
+  const processedEdgesRef   = useRef(processedEdges);
+  const sphericalPosRef     = useRef(sphericalPositions);
+  filteredNodesRef.current  = filteredNodes;
+  processedEdgesRef.current = processedEdges;
+  sphericalPosRef.current   = sphericalPositions;
+
+  /* ── rAF animation loop (direct DOM updates) ── */
+  useEffect(() => {
+    let id: number;
+    const tick = () => {
+      if (!pausedRef.current && !dragRef.current) {
+        rotationRef.current += ROTATION_SPEED;
+      }
+      const rot     = rotationRef.current;
+      const cx      = cxRef.current;
+      const cy      = cyRef.current;
+      const sphereR = sphereRRef.current;
+      const hoverId = hoveredIdRef.current;
+      const neighbors = neighborSetRef.current;
+
+      const positions = new Map<string, { x: number; y: number; depth: number }>();
+
+      // Compute positions
+      for (const node of filteredNodesRef.current) {
+        const sp = sphericalPosRef.current.get(node.id);
+        let x = cx, y = cy, depth = 0.5;
+        if (sp && !sp.isCore) {
+          const t = sp.theta - rot;
+          const sinP = Math.sin(sp.phi);
+          const nx = sinP * Math.cos(t);
+          const ny = -Math.cos(sp.phi);
+          const nz = sinP * Math.sin(t);
+          x = cx + nx * sphereR;
+          y = cy + ny * sphereR;
+          depth = (nz + 1) / 2;
+        }
+        positions.set(node.id, { x, y, depth });
+      }
+
+      // Update node DOM
+      for (const [nodeId, p] of positions) {
+        const el = nodeElRefs.current.get(nodeId);
+        if (!el) continue;
+        el.setAttribute("transform", `translate(${p.x},${p.y})`);
+        let opacity: number;
+        if (hoverId) {
+          if (hoverId === nodeId || neighbors.has(nodeId)) {
+            opacity = 0.6 + p.depth * 0.4;
+          } else {
+            opacity = 0.04;
+          }
+        } else {
+          opacity = 0.30 + p.depth * 0.70;
+        }
+        el.style.opacity = String(opacity);
+      }
+
+      // Update section galaxy DOM
+      for (const node of filteredNodesRef.current) {
+        if (nodeClass(node.id) !== "section") continue;
+        const p = positions.get(node.id);
+        if (!p) continue;
+        const galaxy = galaxyElRefs.current.get(node.id);
+        if (!galaxy) continue;
+        const dom = node.id.split("/")[0];
+        const tilt = SEC_TILT_ANGLES[dom] ?? 0;
+        const sc = 0.55 + p.depth * 0.45;
+        galaxy.setAttribute("transform", `translate(${p.x},${p.y}) rotate(${tilt}) scale(${sc})`);
+        galaxy.style.opacity = String(0.30 + p.depth * 0.70);
+      }
+
+      // Update edge DOM
+      for (const pe of processedEdgesRef.current) {
+        const line = edgeElRefs.current.get(pe.key);
+        if (!line) continue;
+        const src = positions.get(pe.sId);
+        const tgt = positions.get(pe.tId);
+        if (!src || !tgt) { line.style.opacity = "0"; continue; }
+        line.setAttribute("x1", String(src.x));
+        line.setAttribute("y1", String(src.y));
+        line.setAttribute("x2", String(tgt.x));
+        line.setAttribute("y2", String(tgt.y));
+        const minDepth = Math.min(src.depth, tgt.depth);
+        let opacity: number;
+        if (hoverId) {
+          if (pe.sId === hoverId || pe.tId === hoverId) opacity = 0.9;
+          else opacity = 0;
+        } else {
+          opacity = pe.baseOpacity * (0.3 + minDepth * 0.7);
+        }
+        line.style.opacity = String(opacity);
+      }
+
+      id = requestAnimationFrame(tick);
+    };
+    id = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  /* ── Drag rotation ── */
+  const onPointerDown = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    const target = e.target as SVGElement;
+    if (target.closest("[data-node]")) return; // skip drag on nodes
+    dragRef.current = { startX: e.clientX, startRot: rotationRef.current };
+    e.currentTarget.setPointerCapture(e.pointerId);
+    document.body.style.cursor = "grabbing";
+  }, []);
+
+  const onPointerMove = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (!dragRef.current) return;
+    const dx = e.clientX - dragRef.current.startX;
+    rotationRef.current = dragRef.current.startRot + dx * DRAG_SENSITIVITY;
+  }, []);
+
+  const onPointerUp = useCallback((e: React.PointerEvent<SVGSVGElement>) => {
+    if (!dragRef.current) return;
+    dragRef.current = null;
+    try { e.currentTarget.releasePointerCapture(e.pointerId); } catch {}
+    document.body.style.cursor = "";
+  }, []);
+
+  /* ── Hover handlers ── */
+  const onNodeEnter = useCallback((node: GraphNode, ev: React.MouseEvent) => {
+    if (dragRef.current) return;
+    pausedRef.current = true;
+    hoveredIdRef.current = node.id;
+    const ns = new Set<string>();
+    for (const e of filteredEdges) {
+      const s = typeof e.source === "string" ? e.source : (e.source as GraphNode).id;
+      const t = typeof e.target === "string" ? e.target : (e.target as GraphNode).id;
+      if (s === node.id) ns.add(t);
+      if (t === node.id) ns.add(s);
+    }
+    neighborSetRef.current = ns;
+    setHoveredNode(node);
+    setTooltipPos({ x: ev.clientX, y: ev.clientY });
+  }, [filteredEdges]);
+
+  const onNodeLeave = useCallback(() => {
+    pausedRef.current = false;
+    hoveredIdRef.current = null;
+    neighborSetRef.current = new Set();
+    setHoveredNode(null);
+  }, []);
+
+  const onNodeMove = useCallback((ev: React.MouseEvent) => {
+    setTooltipPos({ x: ev.clientX, y: ev.clientY });
+  }, []);
+
+  /* ── Render ── */
   return (
     <div className="relative w-full h-full" style={{ background: "#00000f" }}>
       <svg
         ref={svgRef} width="100%" height="100%"
-        onPointerMove={onSvgPointerMove}
-        onPointerUp={onSvgPointerUp}
-        onPointerLeave={onSvgPointerUp}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerLeave={onPointerUp}
+        style={{ cursor: "grab", touchAction: "none" }}
       >
         <defs>
-          {/* Glow filters */}
           <filter id="glow-soft" x="-40%" y="-40%" width="180%" height="180%">
             <feGaussianBlur stdDeviation="2.5" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
@@ -336,58 +536,49 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
             <feGaussianBlur stdDeviation="10" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <filter id="glow-core" x="-150%" y="-150%" width="400%" height="400%">
-            <feGaussianBlur stdDeviation="18" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
 
-          {/* Background nebulas */}
           <radialGradient id="nebula-1" gradientUnits="userSpaceOnUse"
-            cx={gcx} cy={gcy} r={Math.min(dims.w, dims.h) * 0.52}>
-            <stop offset="0%"   stopColor="#0d2860" stopOpacity="0.55" />
-            <stop offset="35%"  stopColor="#060e30" stopOpacity="0.28" />
+            cx={cx} cy={cy} r={Math.min(dims.w, dims.h) * 0.55}>
+            <stop offset="0%"   stopColor="#0d2860" stopOpacity="0.45" />
+            <stop offset="40%"  stopColor="#060e30" stopOpacity="0.20" />
             <stop offset="100%" stopColor="#00000f" stopOpacity="0" />
           </radialGradient>
           <radialGradient id="nebula-2" gradientUnits="userSpaceOnUse"
-            cx={gcx + 120} cy={gcy - 90} r={Math.min(dims.w, dims.h) * 0.30}>
-            <stop offset="0%"   stopColor="#2a0a5e" stopOpacity="0.32" />
-            <stop offset="100%" stopColor="#00000f" stopOpacity="0" />
-          </radialGradient>
-          <radialGradient id="nebula-3" gradientUnits="userSpaceOnUse"
-            cx={gcx - 90} cy={gcy + 110} r={Math.min(dims.w, dims.h) * 0.26}>
-            <stop offset="0%"   stopColor="#051a40" stopOpacity="0.25" />
+            cx={cx + 140} cy={cy - 100} r={Math.min(dims.w, dims.h) * 0.32}>
+            <stop offset="0%"   stopColor="#2a0a5e" stopOpacity="0.28" />
             <stop offset="100%" stopColor="#00000f" stopOpacity="0" />
           </radialGradient>
 
-          {/* Core galaxy nebula — centered at 0,0 for use in translated group */}
+          <radialGradient id="sphere-atmo" cx="50%" cy="50%" r="50%">
+            <stop offset="60%"  stopColor="#000020" stopOpacity="0" />
+            <stop offset="88%"  stopColor="#0a1840" stopOpacity="0.18" />
+            <stop offset="98%"  stopColor="#1530a0" stopOpacity="0.10" />
+            <stop offset="100%" stopColor="#000005" stopOpacity="0" />
+          </radialGradient>
+
           <radialGradient id="gneb-core-inner" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"   stopColor="#8ec8ff" stopOpacity="0.45" />
-            <stop offset="30%"  stopColor="#3060c0" stopOpacity="0.25" />
-            <stop offset="100%" stopColor="#0a1040" stopOpacity="0" />
+            <stop offset="0%"   stopColor="#a0d0ff" stopOpacity="0.40" />
+            <stop offset="15%"  stopColor="#6090d0" stopOpacity="0.28" />
+            <stop offset="40%"  stopColor="#2850a0" stopOpacity="0.12" />
+            <stop offset="70%"  stopColor="#101840" stopOpacity="0.04" />
+            <stop offset="100%" stopColor="#00000f" stopOpacity="0" />
           </radialGradient>
           <radialGradient id="gneb-core-outer" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"   stopColor="#2040a0" stopOpacity="0.20" />
-            <stop offset="60%"  stopColor="#080e30" stopOpacity="0.10" />
+            <stop offset="0%"   stopColor="#102060" stopOpacity="0.14" />
+            <stop offset="25%"  stopColor="#0a1040" stopOpacity="0.08" />
+            <stop offset="60%"  stopColor="#050820" stopOpacity="0.03" />
             <stop offset="100%" stopColor="#00000f" stopOpacity="0" />
           </radialGradient>
 
-          {/* Section galaxy nebulas per domain */}
           {Object.entries(DOMAIN_COLORS).map(([domain, color]) => (
             <radialGradient key={`gneb-${domain}`} id={`gneb-${domain}`} cx="50%" cy="50%" r="50%">
-              <stop offset="0%"   stopColor={color} stopOpacity="0.30" />
-              <stop offset="40%"  stopColor={color} stopOpacity="0.10" />
+              <stop offset="0%"   stopColor={color} stopOpacity="0.22" />
+              <stop offset="20%"  stopColor={color} stopOpacity="0.12" />
+              <stop offset="50%"  stopColor={color} stopOpacity="0.04" />
               <stop offset="100%" stopColor={color} stopOpacity="0" />
             </radialGradient>
           ))}
 
-          {/* Core sphere gradient */}
-          <radialGradient id="core-grad" cx="38%" cy="32%" r="68%">
-            <stop offset="0%"   stopColor="#e8f4ff" stopOpacity="1" />
-            <stop offset="40%"  stopColor="#a8d0ff" stopOpacity="1" />
-            <stop offset="100%" stopColor="#3060a0" stopOpacity="1" />
-          </radialGradient>
-
-          {/* Section sphere gradients */}
           {Object.entries(DOMAIN_COLORS).map(([domain, color]) => (
             <radialGradient key={`sec-${domain}`} id={`sec-${domain}`} cx="38%" cy="32%" r="68%">
               <stop offset="0%"   stopColor="#ffffff" stopOpacity="0.22" />
@@ -401,179 +592,153 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
           </pattern>
         </defs>
 
-        {/* ── Static background ── */}
+        {/* Static background */}
         <rect width="100%" height="100%" fill="url(#dots)" />
         <rect width="100%" height="100%" fill="url(#nebula-1)" />
         <rect width="100%" height="100%" fill="url(#nebula-2)" />
-        <rect width="100%" height="100%" fill="url(#nebula-3)" />
         {STARS.map((s, i) => (
           <circle key={i} cx={`${s.x}%`} cy={`${s.y}%`} r={s.r}
-            fill={s.blue ? "#a8d8ff" : "#ccd8ff"} opacity={s.o}>
-            <animate attributeName="opacity" values={`${s.o};${s.o * 0.25};${s.o}`}
-              dur={`${s.dur}s`} repeatCount="indefinite" />
-          </circle>
+            fill={s.blue ? "#a8d8ff" : "#ccd8ff"} opacity={s.o} />
         ))}
 
-        {/* ── Zoom group ── */}
+        {/* Zoom group */}
         <g ref={gRef}>
+          {/* Sphere shell */}
+          <circle cx={cx} cy={cy} r={sphereR * 1.04}
+            fill="url(#sphere-atmo)" pointerEvents="none" />
+          <circle cx={cx} cy={cy} r={sphereR}
+            fill="none" stroke="#1a3060" strokeWidth={0.5}
+            strokeOpacity={0.10} strokeDasharray="2 14" />
 
-          {/* ── Core galaxy nebula (at physics center = always gcx,gcy) ── */}
-          <g transform={`translate(${gcx},${gcy})`} style={{ pointerEvents: "none" }}>
-            {/* Outer diffuse cloud */}
-            <ellipse rx={130} ry={110} fill="url(#gneb-core-outer)" />
-            {/* Inner bright core */}
-            <ellipse rx={70}  ry={60}  fill="url(#gneb-core-inner)" />
-            {/* Galaxy dots */}
-            {CORE_DOTS.map((d, i) => (
-              <circle key={i} cx={d.x} cy={d.y} r={d.r}
-                fill="#9ac8ff" opacity={d.o}>
-                <animate attributeName="opacity"
-                  values={`${d.o};${d.o * 0.3};${d.o}`}
-                  dur={`${d.dur}s`} repeatCount="indefinite" />
-              </circle>
-            ))}
+          {/* Section galaxies (rendered once, positions via DOM in rAF) */}
+          {filteredNodes
+            .filter(n => nodeClass(n.id) === "section")
+            .map((node) => {
+              const dom = node.id.split("/")[0];
+              const color = DOMAIN_COLORS[dom] ?? "#5a6080";
+              const dots = SEC_GALAXIES[dom] ?? SEC_GALAXIES.research;
+              const speed = SEC_ROTATION_SPEEDS[dom] ?? 180;
+              const tilt = SEC_TILT_ANGLES[dom] ?? 0;
+              return (
+                <g key={`gneb-${node.id}`}
+                  ref={(el) => {
+                    if (el) galaxyElRefs.current.set(node.id, el);
+                    else    galaxyElRefs.current.delete(node.id);
+                  }}
+                  transform={`translate(${cx},${cy}) rotate(${tilt})`}
+                  style={{ pointerEvents: "none", opacity: 0.6 }}
+                >
+                  <ellipse rx={200} ry={92} fill={`url(#gneb-${dom})`} opacity={0.5} />
+                  <ellipse rx={140} ry={66} fill={`url(#gneb-${dom})`} opacity={0.55} />
+                  <ellipse rx={80}  ry={38} fill={`url(#gneb-${dom})`} opacity={0.6} />
+                  <g style={{
+                    animation: `spin ${speed}s linear infinite ${dom === "personal" || dom === "business" ? "reverse" : ""}`,
+                    transformOrigin: "0 0",
+                  }}>
+                    {dots.map((d, i) => {
+                      let fill: string;
+                      switch (d.layer) {
+                        case "bulge":   fill = "#ffffff"; break;
+                        case "hotspot": fill = color;     break;
+                        case "arm":     fill = color;     break;
+                        case "dust":    fill = `${color}10`; break;
+                        default:        fill = `${color}70`; break;
+                      }
+                      return (
+                        <circle key={i} cx={d.x} cy={d.y} r={d.r}
+                          fill={fill} opacity={d.o}
+                          filter={d.layer === "hotspot" ? "url(#glow-soft)" : undefined} />
+                      );
+                    })}
+                  </g>
+                  <ellipse rx={11} ry={5.5} fill="#fff"  opacity={0.28} filter="url(#glow)" />
+                  <ellipse rx={5}  ry={2.5} fill={color} opacity={0.45} filter="url(#glow-soft)" />
+                </g>
+              );
+            })}
+
+          {/* CORE GALAXY (always at center) */}
+          <g transform={`translate(${cx},${cy})`} style={{ pointerEvents: "none" }}>
+            <ellipse rx={300} ry={130} fill="url(#gneb-core-outer)" opacity={0.6} />
+            <ellipse rx={220} ry={95}  fill="url(#gneb-core-outer)" opacity={0.5} />
+            <ellipse rx={150} ry={65}  fill="url(#gneb-core-inner)" opacity={0.7} />
+            <ellipse rx={85}  ry={38}  fill="url(#gneb-core-inner)" opacity={0.6} />
+            <ellipse rx={40}  ry={18}  fill="url(#gneb-core-inner)" opacity={0.5} />
+            <g style={{ animation: `spin ${CORE_ROTATION_SPEED}s linear infinite`, transformOrigin: "0 0" }}>
+              {CORE_GALAXY.map((d, i) => {
+                let fill: string;
+                switch (d.layer) {
+                  case "bulge":   fill = "#d8e8ff"; break;
+                  case "hotspot": fill = "#a0d4ff"; break;
+                  case "arm":     fill = "#7ab0e8"; break;
+                  case "dust":    fill = "#0a1225"; break;
+                  default:        fill = "#4878b0"; break;
+                }
+                return (
+                  <circle key={i} cx={d.x} cy={d.y} r={d.r}
+                    fill={fill} opacity={d.o}
+                    filter={d.layer === "hotspot" ? "url(#glow-soft)" : undefined} />
+                );
+              })}
+            </g>
+            <ellipse rx={20} ry={9}  fill="#c8e0ff" opacity={0.30} filter="url(#glow-strong)" />
+            <ellipse rx={10} ry={5}  fill="#e8f4ff" opacity={0.45} filter="url(#glow)" />
           </g>
 
-          {/* ── Section galaxy nebulas (at rendered positions) ── */}
-          {sectionNodes.map((node) => {
-            const pos    = positions.get(node.id);
-            if (!pos) return null;
-            const domain = node.id.split("/")[0];
-            const color  = DOMAIN_COLORS[domain] ?? "#5a6080";
-            const dots   = SEC_DOTS[domain] ?? SEC_DOTS.research;
+          {/* EDGES (positions/opacity via rAF) */}
+          {processedEdges.map((pe) => {
+            const isHoverConnected = hoveredNode &&
+              (pe.sId === hoveredNode.id || pe.tId === hoveredNode.id);
+            const stroke = isHoverConnected
+              ? (pe.e.broken ? "#ef4444" : "#7fc8ff")
+              : pe.color;
             return (
-              <g key={`gneb-${node.id}`}
-                transform={`translate(${pos.x},${pos.y})`}
-                style={{ pointerEvents: "none" }}>
-                <ellipse rx={90} ry={75} fill={`url(#gneb-${domain})`} />
-                {dots.map((d, i) => (
-                  <circle key={i} cx={d.x} cy={d.y} r={d.r}
-                    fill={color} opacity={d.o * 0.7}>
-                    <animate attributeName="opacity"
-                      values={`${d.o * 0.7};${d.o * 0.15};${d.o * 0.7}`}
-                      dur={`${d.dur}s`} repeatCount="indefinite" />
-                  </circle>
-                ))}
-              </g>
-            );
-          })}
-
-          {/* Orbit rings */}
-          {[SECTION_ORBIT_R, SECTION_ORBIT_R * 1.65, SECTION_ORBIT_R * 2.5].map((r) => (
-            <circle key={r} cx={gcx} cy={gcy} r={r}
-              fill="none" stroke="#4f9cf9" strokeWidth={0.4}
-              strokeOpacity={0.04} strokeDasharray="5 18" />
-          ))}
-
-          {/* ── Edges ── */}
-          {/* Rules: core→section visible | section→leaf visible | everything else hidden */}
-          {filteredEdges.map((e, i) => {
-            const srcId = typeof e.source === "string" ? e.source : (e.source as GraphNode).id;
-            const tgtId = typeof e.target === "string" ? e.target : (e.target as GraphNode).id;
-            const src = positions.get(srcId);
-            const tgt = positions.get(tgtId);
-            if (!src || !tgt) return null;
-
-            const sc = nodeClass(srcId);
-            const tc = nodeClass(tgtId);
-
-            // Only render:
-            //   1. core → section   (spinal)
-            //   2. section → leaf   (sectional)
-            //   3. concept ↔ source-summary  (conceptual link)
-            const isSpinal    = (sc === "core" && tc === "section") || (tc === "core" && sc === "section");
-            const isSectional = !isSpinal && ((sc === "section" && (tc === "leaf" || tc === "ghost")) ||
-                                              (tc === "section" && (sc === "leaf" || sc === "ghost")));
-
-            // look up node types for conceptual link check
-            const srcNode = filteredNodes.find((n) => n.id === srcId);
-            const tgtNode = filteredNodes.find((n) => n.id === tgtId);
-            const isConceptual = !isSpinal && !isSectional &&
-              sc === "leaf" && tc === "leaf" &&
-              !!srcNode && !!tgtNode && (
-                (srcNode.type === "concept" && tgtNode.type === "source-summary") ||
-                (srcNode.type === "source-summary" && tgtNode.type === "concept")
-              );
-
-            if (!isSpinal && !isSectional && !isConceptual) return null;
-
-            const connected = hoveredNode && (hoveredNode.id === srcId || hoveredNode.id === tgtId);
-            const dimmed    = hoveredNode && !connected;
-
-            // Derive domain color from section node involved
-            let domainColor = "#4f9cf9";
-            if (isSpinal) {
-              const sid = sc === "core" ? tgtId : srcId;
-              domainColor = DOMAIN_COLORS[sid.split("/")[0]] ?? domainColor;
-            } else if (isSectional) {
-              const sid = sc === "section" ? srcId : tgtId;
-              domainColor = DOMAIN_COLORS[sid.split("/")[0]] ?? domainColor;
-            } else if (isConceptual) {
-              domainColor = DOMAIN_COLORS[srcNode!.domain[0]] ?? domainColor;
-            }
-
-            const edgeColor = connected
-              ? (e.broken ? "#ef4444" : "#7fc8ff")
-              : isSpinal
-                ? domainColor
-                : isConceptual
-                  ? domainColor + "99"
-                  : domainColor + "55";
-
-            return (
-              <line key={i}
-                x1={src.x} y1={src.y} x2={tgt.x} y2={tgt.y}
-                stroke={edgeColor}
-                strokeWidth={isSpinal ? 1.2 : isConceptual ? 0.9 : 0.7}
-                strokeDasharray={e.broken ? "4 3" : isConceptual ? "2 4" : undefined}
-                opacity={dimmed ? 0 : connected ? 0.9 : isSpinal ? 0.55 : isConceptual ? 0.45 : 0.28}
+              <line key={pe.key}
+                ref={(el) => {
+                  if (el) edgeElRefs.current.set(pe.key, el);
+                  else    edgeElRefs.current.delete(pe.key);
+                }}
+                x1={cx} y1={cy} x2={cx} y2={cy}
+                stroke={stroke}
+                strokeWidth={pe.strokeWidth}
+                strokeDasharray={pe.dashArray}
+                style={{ opacity: 0 }}
               />
             );
           })}
 
-          {/* ── Nodes ── */}
-          {filteredNodes.map((node, idx) => {
-            const pos  = positions.get(node.id) ?? { x: gcx, y: gcy };
-            const cls  = nodeClass(node.id, node.broken);
-            const r    = nodeRadius(node);
+          {/* NODES (positions/opacity via rAF) */}
+          {filteredNodes.map((node) => {
+            const cls = nodeClass(node.id, node.broken);
+            const r   = nodeRadius(node);
+            const isHovered  = hoveredNode?.id === node.id;
+            const isNeighbor = hoveredNode ? neighborSetRef.current.has(node.id) : false;
+            const showLabel  = (cls === "core" || cls === "section") || isHovered || (zoomScale > 1.4 && cls === "leaf");
 
-            const neighbors   = hoveredNode ? neighborIds(hoveredNode.id) : null;
-            const isHovered   = hoveredNode?.id === node.id;
-            const isNeighbor  = neighbors?.has(node.id) ?? false;
-            const dimmed      = hoveredNode !== null && !isHovered && !isNeighbor;
-            const highlighted = isHovered || isNeighbor;
-
-            const pulseDur   = `${3.5 + (idx % 4) * 0.8}s`;
-            const pulseDelay = `${(idx % 5) * 0.6}s`;
-
-            /* Zoom-aware label: core+section always visible; leaves show when zoomed in */
-            const showLabel  = cls === "core" || cls === "section"
-              ? !dimmed
-              : !dimmed && (zoomScale > 1.4 || isHovered || isNeighbor);
-
-            /* ── CORE ── */
             if (cls === "core") {
               return (
-                <g key={node.id} transform={`translate(${pos.x},${pos.y})`}
+                <g key={node.id}
+                  data-node="1"
+                  ref={(el) => {
+                    if (el) nodeElRefs.current.set(node.id, el);
+                    else    nodeElRefs.current.delete(node.id);
+                  }}
+                  transform={`translate(${cx},${cy})`}
                   style={{ cursor: "pointer" }}
-                  onMouseEnter={(ev) => { if (!dragRef.current) { simRef.current?.stop(); setHoveredNode(node); setTooltipPos({ x: ev.clientX, y: ev.clientY }); } }}
-                  onMouseMove={(ev)  => { if (!dragRef.current) setTooltipPos({ x: ev.clientX, y: ev.clientY }); }}
-                  onMouseLeave={() => { simRef.current?.restart(); setHoveredNode(null); }}
+                  onMouseEnter={(ev) => onNodeEnter(node, ev)}
+                  onMouseMove={onNodeMove}
+                  onMouseLeave={onNodeLeave}
                   onClick={(e) => { router.push("/wiki/index"); e.stopPropagation(); }}
                 >
-                  <circle fill="#6ab4ff" opacity={0}>
-                    <animate attributeName="r"       values="28;60;28" dur="9s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0.12;0.02;0.12" dur="9s" repeatCount="indefinite" />
-                  </circle>
                   <circle r={r + 10} fill="#4080c0" opacity={isHovered ? 0.22 : 0.10} />
                   <circle r={r + 6}  fill="none" stroke="#a8d0ff" strokeWidth={0.8}
                     strokeOpacity={0.35} strokeDasharray="4 8" />
-                  <circle r={r} fill="url(#core-grad)"
-                    filter={isHovered ? "url(#glow-core)" : "url(#glow-strong)"} />
+                  <circle r={r}      fill="#7ab8ff"
+                    filter={isHovered ? "url(#glow-strong)" : "url(#glow)"} />
                   {showLabel && (
                     <text textAnchor="middle" y={r + 18}
-                      fontSize={12 / zoomScale + 3} fontWeight={700}
-                      fill={isHovered ? "#fff" : "#7ab8ff"}
+                      fontSize={14} fontWeight={700}
+                      fill={isHovered ? "#fff" : "#a8d0ff"}
                       style={{ pointerEvents: "none", userSelect: "none" }}
                       filter="url(#glow-soft)">
                       {node.label}
@@ -583,37 +748,35 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
               );
             }
 
-            /* ── SECTION ── */
             if (cls === "section") {
-              const domain = node.id.split("/")[0];
-              const color  = DOMAIN_COLORS[domain] ?? "#5a6080";
+              const dom = node.id.split("/")[0];
+              const color = DOMAIN_COLORS[dom] ?? "#5a6080";
               return (
-                <g key={node.id} transform={`translate(${pos.x},${pos.y})`}
+                <g key={node.id}
+                  data-node="1"
+                  ref={(el) => {
+                    if (el) nodeElRefs.current.set(node.id, el);
+                    else    nodeElRefs.current.delete(node.id);
+                  }}
+                  transform={`translate(${cx},${cy})`}
                   style={{ cursor: "pointer" }}
-                  onPointerDown={(e) => onNodePointerDown(e, node.id)}
-                  onMouseEnter={(ev) => { if (!dragRef.current) { simRef.current?.stop(); setHoveredNode(node); setTooltipPos({ x: ev.clientX, y: ev.clientY }); } }}
-                  onMouseMove={(ev)  => { if (!dragRef.current) setTooltipPos({ x: ev.clientX, y: ev.clientY }); }}
-                  onMouseLeave={() => { simRef.current?.restart(); setHoveredNode(null); }}
+                  onMouseEnter={(ev) => onNodeEnter(node, ev)}
+                  onMouseMove={onNodeMove}
+                  onMouseLeave={onNodeLeave}
                   onClick={(e) => { router.push(`/wiki/${node.id}`); e.stopPropagation(); }}
                 >
-                  <circle fill={color} opacity={0}>
-                    <animate attributeName="r"       values={`${r+6};${r+20};${r+6}`} dur={pulseDur} begin={pulseDelay} repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0.18;0.03;0.18"           dur={pulseDur} begin={pulseDelay} repeatCount="indefinite" />
-                  </circle>
-                  <circle r={r + 5} fill={color} opacity={isHovered ? 0.24 : dimmed ? 0.01 : 0.10} />
+                  <circle r={r + 5} fill={color} opacity={isHovered ? 0.24 : 0.10} />
                   <circle r={r + 4} fill="none" stroke={color} strokeWidth={0.7}
-                    strokeOpacity={dimmed ? 0.04 : 0.30} strokeDasharray="3 6" />
+                    strokeOpacity={0.30} strokeDasharray="3 6" />
                   <circle r={r}
-                    fill={`url(#sec-${domain})`}
-                    fillOpacity={dimmed ? 0.14 : 1}
+                    fill={`url(#sec-${dom})`}
                     stroke={color} strokeWidth={isHovered ? 2 : 1.2}
-                    strokeOpacity={dimmed ? 0.05 : 0.8}
-                    filter={isHovered ? "url(#glow-strong)" : "url(#glow)"}
-                  />
+                    strokeOpacity={0.8}
+                    filter={isHovered ? "url(#glow-strong)" : "url(#glow)"} />
                   {showLabel && (
                     <text textAnchor="middle" y={r + 16}
                       fontSize={Math.max(9, 11 / zoomScale + 2)} fontWeight={600}
-                      fill={dimmed ? "#2a2a3a" : isHovered ? "#fff" : color}
+                      fill={isHovered ? "#fff" : color}
                       style={{ pointerEvents: "none", userSelect: "none" }}>
                       {node.label}
                     </text>
@@ -622,24 +785,24 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
               );
             }
 
-            /* ── LEAF / GHOST ── */
+            // LEAF / GHOST
             const color = cls === "ghost" ? "#27272a" : leafColor(node);
+            const highlighted = isHovered || isNeighbor;
             return (
-              <g key={node.id} transform={`translate(${pos.x},${pos.y})`}
-                style={{ cursor: node.broken ? "default" : "grab" }}
-                onPointerDown={(e) => onNodePointerDown(e, node.id)}
-                onMouseEnter={(ev) => { if (!dragRef.current) { simRef.current?.stop(); setHoveredNode(node); setTooltipPos({ x: ev.clientX, y: ev.clientY }); } }}
-                onMouseMove={(ev)  => { if (!dragRef.current) setTooltipPos({ x: ev.clientX, y: ev.clientY }); }}
-                onMouseLeave={() => { simRef.current?.restart(); setHoveredNode(null); }}
-                onClick={(e) => { if (!node.broken && !dragRef.current) router.push(`/wiki/${node.id}`); e.stopPropagation(); }}
+              <g key={node.id}
+                data-node="1"
+                ref={(el) => {
+                  if (el) nodeElRefs.current.set(node.id, el);
+                  else    nodeElRefs.current.delete(node.id);
+                }}
+                transform={`translate(${cx},${cy})`}
+                style={{ cursor: node.broken ? "default" : "pointer" }}
+                onMouseEnter={(ev) => onNodeEnter(node, ev)}
+                onMouseMove={onNodeMove}
+                onMouseLeave={onNodeLeave}
+                onClick={(e) => { if (!node.broken) router.push(`/wiki/${node.id}`); e.stopPropagation(); }}
               >
-                {!dimmed && !node.broken && (
-                  <circle fill={color} opacity={0}>
-                    <animate attributeName="r"       values={`${r+5};${r+14};${r+5}`} dur={pulseDur} begin={pulseDelay} repeatCount="indefinite" />
-                    <animate attributeName="opacity" values="0.14;0.02;0.14"           dur={pulseDur} begin={pulseDelay} repeatCount="indefinite" />
-                  </circle>
-                )}
-                {!dimmed && !node.broken && (
+                {!node.broken && (
                   <circle r={r + 4} fill={color} opacity={highlighted ? 0.16 : 0.04}
                     style={{ pointerEvents: "none" }} />
                 )}
@@ -648,17 +811,12 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
                 )}
                 <circle r={r}
                   fill={node.broken ? "transparent" : color}
-                  fillOpacity={dimmed ? 0.04 : node.broken ? 0 : highlighted ? 1 : 0.85}
+                  fillOpacity={node.broken ? 0 : highlighted ? 1 : 0.85}
                   stroke={color}
                   strokeWidth={isHovered ? 2 : node.broken ? 0.8 : 1.2}
-                  strokeOpacity={dimmed ? 0.04 : node.broken ? 0.18 : highlighted ? 1 : 0.65}
+                  strokeOpacity={node.broken ? 0.25 : highlighted ? 1 : 0.65}
                   strokeDasharray={node.broken ? "3 2" : undefined}
-                  filter={
-                    isHovered  ? "url(#glow-strong)" :
-                    isNeighbor ? "url(#glow)" :
-                    dimmed     ? undefined : "url(#glow-soft)"
-                  }
-                />
+                  filter={isHovered ? "url(#glow-strong)" : isNeighbor ? "url(#glow)" : "url(#glow-soft)"} />
                 {showLabel && (
                   <text textAnchor="middle" y={r + 12}
                     fontSize={isHovered ? 10 : 8.5}
@@ -674,7 +832,7 @@ export default function KnowledgeGraph({ data, activeDomains }: Props) {
         </g>
       </svg>
 
-      {hoveredNode && !dragRef.current && (
+      {hoveredNode && (
         <NodeTooltip node={hoveredNode} x={tooltipPos.x} y={tooltipPos.y} />
       )}
     </div>
