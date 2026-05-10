@@ -54,11 +54,66 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
     (p) => activeDomains.size === 0 || p.domain.some((d) => activeDomains.has(d))
   ).length;
 
-  /* ── MOBILE LAYOUT: only the sphere ── */
+  /* ── MOBILE LAYOUT ── */
   if (isMobile) {
     return (
-      <div style={{ height: "100%", width: "100%", background: "#000", overflow: "hidden" }}>
-        <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} />
+      <div style={{ height: "100dvh", width: "100%", background: "#00000f", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Mobile top bar */}
+        <div style={{
+          height: 48, flexShrink: 0,
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "0 16px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          background: "rgba(0,0,10,0.85)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          zIndex: 20,
+        }}>
+          {/* Logo mark */}
+          <svg width="16" height="18" viewBox="0 0 18 20" fill="none" style={{ flexShrink: 0 }}>
+            <polygon points="9,1 17,5.5 17,14.5 9,19 1,14.5 1,5.5"
+              stroke="#4f9cf9" strokeWidth="1" fill="none" strokeOpacity="0.8" />
+            <circle cx="9" cy="10" r="1.5" fill="#4f9cf9" opacity="0.6" />
+          </svg>
+          <span style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 12, letterSpacing: "0.1em", flex: 1 }}>
+            2BRAIN
+          </span>
+          {/* View toggle */}
+          <div style={{
+            display: "flex", alignItems: "center",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 4, overflow: "hidden",
+          }}>
+            {(["graph", "list"] as const).map((v, i) => (
+              <button
+                key={v}
+                onClick={() => setView(v)}
+                style={{
+                  padding: "5px 14px", fontSize: 10, cursor: "pointer", fontWeight: 600,
+                  border: "none",
+                  borderRight: i === 0 ? "1px solid rgba(255,255,255,0.06)" : "none",
+                  background: view === v ? "rgba(79,156,249,0.12)" : "transparent",
+                  color: view === v ? "#4f9cf9" : "#52525b",
+                  letterSpacing: "0.08em", textTransform: "uppercase" as const,
+                  fontFamily: "inherit",
+                }}
+              >
+                {v === "graph" ? "⬡" : "≡"} {v}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content area */}
+        {view === "graph" ? (
+          <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+            <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} />
+          </div>
+        ) : (
+          <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
+            <PageTable pages={pages} linkDegrees={linkDegrees} activeDomains={activeDomains} />
+          </div>
+        )}
       </div>
     );
   }

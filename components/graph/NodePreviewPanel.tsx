@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import type { GraphNode, ParsedPage } from "@/lib/types";
 
+const MOBILE_BP = 768;
+
 const TYPE_META: Record<string, { dot: string; label: string }> = {
   concept:          { dot: "#4f9cf9", label: "CONCEPT"   },
   person:           { dot: "#4ade80", label: "PERSON"    },
@@ -29,6 +31,13 @@ export default function NodePreviewPanel({ node, page }: Props) {
   /* Keep last node during fade-out for smooth transition */
   const [shownNode, setShownNode] = useState<GraphNode | null>(null);
   const [shownPage, setShownPage] = useState<ParsedPage | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < MOBILE_BP);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   useEffect(() => {
     if (node) {
       setShownNode(node);
@@ -42,21 +51,36 @@ export default function NodePreviewPanel({ node, page }: Props) {
   const meta = display ? (TYPE_META[display.type] ?? { dot: "#71717a", label: display.type.toUpperCase() }) : TYPE_META.page;
   const c = meta.dot;
 
+  /* Mobile: bottom sheet anchored, Desktop: top-left panel */
+  const mobileStyle: React.CSSProperties = {
+    position: "absolute",
+    bottom: 12,
+    left: 12,
+    right: 12,
+    top: "auto",
+    width: "auto",
+    maxWidth: "none",
+    zIndex: 20,
+    pointerEvents: "none",
+    opacity: visible ? 1 : 0,
+    transform: visible ? "translateY(0)" : "translateY(14px)",
+    transition: "opacity 0.18s ease, transform 0.18s ease",
+  };
+  const desktopStyle: React.CSSProperties = {
+    position: "absolute",
+    top: 100,
+    left: 24,
+    width: 360,
+    maxWidth: "calc(50vw - 48px)",
+    zIndex: 20,
+    pointerEvents: "none",
+    opacity: visible ? 1 : 0,
+    transform: visible ? "translateX(0)" : "translateX(-12px)",
+    transition: "opacity 0.18s ease, transform 0.18s ease",
+  };
+
   return (
-    <div
-      style={{
-        position: "absolute",
-        top: 24,
-        left: 24,
-        width: 360,
-        maxWidth: "calc(50vw - 48px)",
-        zIndex: 20,
-        pointerEvents: "none",
-        opacity: visible ? 1 : 0,
-        transform: visible ? "translateX(0)" : "translateX(-12px)",
-        transition: "opacity 0.18s ease, transform 0.18s ease",
-      }}
-    >
+    <div style={isMobile ? mobileStyle : desktopStyle}>
       <div
         style={{
           position: "relative",
