@@ -10,6 +10,13 @@ interface Props {
   allPages: ParsedPage[];
 }
 
+const TYPE_COLORS: Record<string, string> = {
+  concept:          "#4f9cf9",
+  person:           "#4ade80",
+  "source-summary": "#facc15",
+  synthesis:        "#c084fc",
+};
+
 function resolveWikiLinksInText(text: string, slugMap: Map<string, string>): React.ReactNode[] {
   const parts: React.ReactNode[] = [];
   const re = /\[\[([^\]]+)\]\]/g;
@@ -72,11 +79,56 @@ function processChildren(
 export default function PageView({ page, allPages }: Props) {
   const slugMap = buildSlugMap(allPages);
   const slugObj = Object.fromEntries(slugMap.entries());
+  const accent = TYPE_COLORS[page.type] ?? "#4f9cf9";
 
   return (
-    <article className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-3xl font-bold text-[var(--text-primary)] mb-6">{page.title}</h1>
+    <article
+      className="mx-auto max-w-3xl px-6 py-10"
+      style={{ animation: "fadeInUp 0.4s ease-out" }}
+    >
+      {/* Hero title block with type accent */}
+      <header style={{ marginBottom: 24, position: "relative" }}>
+        {/* Subtle accent bar */}
+        <div
+          style={{
+            position: "absolute",
+            left: -16,
+            top: 8,
+            bottom: 8,
+            width: 2,
+            background: `linear-gradient(180deg, ${accent}99, transparent)`,
+            borderRadius: 2,
+          }}
+        />
+        <h1
+          style={{
+            color: "#fafafa",
+            fontWeight: 700,
+            fontSize: 34,
+            lineHeight: 1.15,
+            letterSpacing: "-0.02em",
+            marginBottom: 8,
+          }}
+        >
+          {page.title}
+        </h1>
+        {page.excerpt && (
+          <p
+            style={{
+              color: "#71717a",
+              fontSize: 15,
+              lineHeight: 1.55,
+              fontWeight: 400,
+              maxWidth: 640,
+            }}
+          >
+            {page.excerpt}
+          </p>
+        )}
+      </header>
+
       <MetadataBar page={page} slugMap={slugObj} />
+
       <div className="prose prose-invert max-w-none">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}

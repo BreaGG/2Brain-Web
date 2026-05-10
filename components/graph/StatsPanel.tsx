@@ -144,7 +144,7 @@ export default function StatsPanel({ pages, graphData, activeDomains, onToggleDo
     <>
       {/* ── 2×2 PANEL OVERLAY ── */}
       <div style={{
-        position: "absolute", right: 150, top: 24,
+        position: "absolute", right: 90, top: 120,
         width: 480, pointerEvents: "auto", zIndex: 10,
         display: "grid",
         gridTemplateColumns: "1fr 1fr",
@@ -371,7 +371,7 @@ function TimelineChart({ data }: { data: { m: string; total: number }[] }) {
 
   return (
     <div style={{
-      position: "absolute", bottom: 14, left: 0, right: 520,
+      position: "absolute", bottom: 50, left: 0, right: 520,
       display: "flex", flexDirection: "column", alignItems: "center",
       pointerEvents: "auto", zIndex: 10,
     }}>

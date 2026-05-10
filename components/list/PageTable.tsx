@@ -23,6 +23,7 @@ interface Props {
 export default function PageTable({ pages, linkDegrees, activeDomains }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("lastUpdated");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [hoverSlug, setHoverSlug] = useState<string | null>(null);
 
   const filtered = activeDomains.size === 0
     ? pages
@@ -31,11 +32,11 @@ export default function PageTable({ pages, linkDegrees, activeDomains }: Props) 
   const sorted = [...filtered].sort((a, b) => {
     let cmp = 0;
     switch (sortKey) {
-      case "title": cmp = a.title.localeCompare(b.title); break;
-      case "type": cmp = a.type.localeCompare(b.type); break;
+      case "title":       cmp = a.title.localeCompare(b.title); break;
+      case "type":        cmp = a.type.localeCompare(b.type); break;
       case "lastUpdated": cmp = a.lastUpdated.localeCompare(b.lastUpdated); break;
-      case "sources": cmp = a.sources.length - b.sources.length; break;
-      case "links": cmp = (linkDegrees.get(a.slug) ?? 0) - (linkDegrees.get(b.slug) ?? 0); break;
+      case "sources":     cmp = a.sources.length - b.sources.length; break;
+      case "links":       cmp = (linkDegrees.get(a.slug) ?? 0) - (linkDegrees.get(b.slug) ?? 0); break;
     }
     return sortDir === "asc" ? cmp : -cmp;
   });
@@ -43,11 +44,6 @@ export default function PageTable({ pages, linkDegrees, activeDomains }: Props) 
   function toggleSort(key: SortKey) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir("desc"); }
-  }
-
-  function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col) return <span className="text-white/20">↕</span>;
-    return <span>{sortDir === "asc" ? "↑" : "↓"}</span>;
   }
 
   const COL_LABELS: Record<SortKey, string> = {
@@ -59,98 +55,157 @@ export default function PageTable({ pages, linkDegrees, activeDomains }: Props) 
   };
 
   return (
-    <div style={{ width: "100%", overflowX: "auto" }}>
+    <div
+      style={{ width: "100%", overflowX: "auto", animation: "fadeIn 0.3s ease-out" }}
+    >
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
         <thead>
-          <tr style={{ borderBottom: "1px solid #141414" }}>
-            {(["title", "type", "lastUpdated", "sources", "links"] as SortKey[]).map((col) => (
-              <th
-                key={col}
-                onClick={() => toggleSort(col)}
-                style={{
-                  padding: "10px 16px",
-                  textAlign: "left",
-                  fontWeight: 500,
-                  fontSize: 11,
-                  color: sortKey === col ? "#a1a1aa" : "#3f3f46",
-                  cursor: "pointer",
-                  userSelect: "none",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.06em",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {COL_LABELS[col]}{" "}
-                <span style={{ opacity: 0.5 }}>
-                  {sortKey === col ? (sortDir === "asc" ? "↑" : "↓") : ""}
-                </span>
-              </th>
-            ))}
+          <tr
+            style={{
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+              background: "rgba(0,0,0,0.5)",
+              backdropFilter: "blur(8px)",
+              position: "sticky",
+              top: 0,
+              zIndex: 1,
+            }}
+          >
+            {(["title", "type", "lastUpdated", "sources", "links"] as SortKey[]).map((col) => {
+              const active = sortKey === col;
+              return (
+                <th
+                  key={col}
+                  onClick={() => toggleSort(col)}
+                  style={{
+                    padding: "12px 18px",
+                    textAlign: "left",
+                    fontWeight: 600,
+                    fontSize: 9,
+                    color: active ? "#a1a1aa" : "#3f3f46",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.14em",
+                    whiteSpace: "nowrap",
+                    fontFamily: "monospace",
+                    transition: "color 0.15s",
+                  }}
+                  onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#71717a"; }}
+                  onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = "#3f3f46"; }}
+                >
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {COL_LABELS[col]}
+                    <span
+                      style={{
+                        opacity: active ? 1 : 0.25,
+                        color: active ? "#4f9cf9" : "currentColor",
+                        fontSize: 10,
+                      }}
+                    >
+                      {active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}
+                    </span>
+                  </span>
+                </th>
+              );
+            })}
           </tr>
         </thead>
         <tbody>
           {sorted.map((page) => {
             const tc = TYPE_COLORS[page.type] ?? { bg: "#1a1a1a", color: "#71717a" };
+            const isHover = hoverSlug === page.slug;
             return (
               <tr
                 key={page.slug}
-                style={{ borderBottom: "1px solid #0d0d0d" }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = "#080808")}
-                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                style={{
+                  borderBottom: "1px solid rgba(255,255,255,0.03)",
+                  background: isHover ? `${tc.color}06` : "transparent",
+                  transition: "background 0.12s",
+                  position: "relative",
+                }}
+                onMouseEnter={() => setHoverSlug(page.slug)}
+                onMouseLeave={() => setHoverSlug(null)}
               >
-                <td style={{ padding: "12px 16px" }}>
+                <td style={{ padding: "14px 18px", position: "relative" }}>
+                  {/* Left accent bar on hover */}
+                  <span
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: "12%",
+                      bottom: "12%",
+                      width: 2,
+                      background: tc.color,
+                      opacity: isHover ? 1 : 0,
+                      transition: "opacity 0.15s",
+                      borderRadius: "0 2px 2px 0",
+                    }}
+                  />
                   <Link
                     href={`/wiki/${page.slug}`}
                     style={{
-                      color: "#fff",
+                      color: isHover ? tc.color : "#e4e4e7",
                       textDecoration: "none",
                       fontWeight: 500,
                       fontSize: 13,
+                      transition: "color 0.12s",
+                      display: "block",
                     }}
-                    onMouseEnter={(e) => (e.currentTarget.style.color = "#4f9cf9")}
-                    onMouseLeave={(e) => (e.currentTarget.style.color = "#fff")}
                   >
                     {page.title}
                   </Link>
                   {page.excerpt && (
                     <p
                       style={{
-                        color: "#71717a",
+                        color: "#52525b",
                         fontSize: 11,
-                        marginTop: 3,
+                        marginTop: 4,
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
-                        maxWidth: 360,
+                        maxWidth: 480,
+                        lineHeight: 1.4,
                       }}
                     >
                       {page.excerpt}
                     </p>
                   )}
                 </td>
-                <td style={{ padding: "12px 16px" }}>
+                <td style={{ padding: "14px 18px", whiteSpace: "nowrap" }}>
                   <span
                     style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 5,
                       background: tc.bg,
                       color: tc.color,
                       border: `1px solid ${tc.color}30`,
-                      borderRadius: 5,
-                      padding: "2px 8px",
-                      fontSize: 11,
+                      borderRadius: 4,
+                      padding: "3px 9px",
+                      fontSize: 10,
                       fontWeight: 500,
-                      whiteSpace: "nowrap",
+                      letterSpacing: "0.04em",
                     }}
                   >
+                    <span style={{ width: 4, height: 4, borderRadius: "50%", background: tc.color }} />
                     {page.type}
                   </span>
                 </td>
-                <td style={{ padding: "12px 16px", color: "#a1a1aa", fontSize: 12, whiteSpace: "nowrap" }}>
+                <td
+                  style={{
+                    padding: "14px 18px",
+                    color: "#a1a1aa",
+                    fontSize: 11,
+                    whiteSpace: "nowrap",
+                    fontFamily: "monospace",
+                  }}
+                >
                   {page.lastUpdated || "—"}
                 </td>
-                <td style={{ padding: "12px 16px", color: "#a1a1aa", fontSize: 12 }}>
+                <td style={{ padding: "14px 18px", color: "#71717a", fontSize: 12, fontFamily: "monospace" }}>
                   {page.sources.length || "—"}
                 </td>
-                <td style={{ padding: "12px 16px", color: "#a1a1aa", fontSize: 12 }}>
+                <td style={{ padding: "14px 18px", color: "#71717a", fontSize: 12, fontFamily: "monospace" }}>
                   {linkDegrees.get(page.slug) ?? 0}
                 </td>
               </tr>
@@ -159,9 +214,18 @@ export default function PageTable({ pages, linkDegrees, activeDomains }: Props) 
         </tbody>
       </table>
       {sorted.length === 0 && (
-        <p style={{ padding: "48px 0", textAlign: "center", color: "#3f3f46", fontSize: 13 }}>
-          No pages in selected domains.
-        </p>
+        <div
+          style={{
+            padding: "64px 0",
+            textAlign: "center",
+            color: "#3f3f46",
+            fontSize: 13,
+            fontFamily: "monospace",
+            letterSpacing: "0.1em",
+          }}
+        >
+          ○ NO PAGES IN SELECTED DOMAINS
+        </div>
       )}
     </div>
   );

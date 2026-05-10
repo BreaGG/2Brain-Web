@@ -69,6 +69,32 @@ html, body {
   to   { transform: rotate(360deg); }
 }
 
+/* ─── Page entrance ─── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ─── Selection ─── */
+::selection {
+  background: rgba(79, 156, 249, 0.30);
+  color: #fff;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: #050508; }
+::-webkit-scrollbar-thumb {
+  background: #1a1a22;
+  border-radius: 5px;
+  border: 2px solid #050508;
+}
+::-webkit-scrollbar-thumb:hover { background: #2a2a35; }
+
 /* ─── Prose (wiki pages) ─── */
 .prose { color: var(--text-primary); }
 

@@ -17,12 +17,12 @@ export default function Navbar({ view, onViewChange, onSearchOpen }: Props) {
         alignItems: "center",
         gap: 16,
         padding: "0 20px",
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
-        background: "rgba(0,0,0,0.98)",
-        backdropFilter: "blur(20px)",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        background: "transparent",
         flexShrink: 0,
         position: "relative",
         zIndex: 20,
+        textShadow: "0 1px 3px rgba(0,0,0,0.85)",
       }}
     >
       {/* Bottom gradient accent line */}

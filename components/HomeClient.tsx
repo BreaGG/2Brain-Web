@@ -58,25 +58,48 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
   if (isMobile) {
     return (
       <div style={{ height: "100%", width: "100%", background: "#000", overflow: "hidden" }}>
-        <KnowledgeGraph data={graphData} activeDomains={activeDomains} />
+        <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} />
       </div>
     );
   }
 
   /* ── DESKTOP LAYOUT ── */
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#000" }}>
-      <Navbar view={view} onViewChange={setView} onSearchOpen={() => setSearchOpen(true)} />
+    <div style={{ position: "relative", height: "100%", overflow: "hidden", background: "#00000f" }}>
+      {/* Graph fills entire viewport BEHIND nav/footer */}
+      {view === "graph" && (
+        <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
+          <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} />
+        </div>
+      )}
 
-      {/* Control bar */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 12,
-        padding: "7px 20px",
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
-        background: "rgba(0,0,0,0.98)",
-        flexShrink: 0,
-        position: "relative",
-      }}>
+      {/* List view (when active) — full viewport with top padding for nav */}
+      {view === "list" && (
+        <div style={{ position: "absolute", inset: 0, top: 96, zIndex: 5, overflowY: "auto" }}>
+          <PageTable pages={pages} linkDegrees={linkDegrees} activeDomains={activeDomains} />
+        </div>
+      )}
+
+      {/* StatsPanel overlay */}
+      {view === "graph" && (
+        <StatsPanel pages={pages} graphData={graphData} activeDomains={activeDomains} onToggleDomain={toggleDomain} />
+      )}
+
+      {/* Top UI overlay — nav + control bar */}
+      <div style={{ position: "absolute", top: 0, left: 0, right: 0, zIndex: 20, pointerEvents: "none" }}>
+        <div style={{ pointerEvents: "auto" }}>
+          <Navbar view={view} onViewChange={setView} onSearchOpen={() => setSearchOpen(true)} />
+        </div>
+
+        {/* Control bar */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 12,
+          padding: "7px 20px",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          background: "transparent",
+          position: "relative",
+          pointerEvents: "auto",
+        }}>
         <GraphControls
           allDomains={allDomains}
           activeDomains={activeDomains}
@@ -87,40 +110,30 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
           marginLeft: "auto",
           display: "flex", alignItems: "center", gap: 8,
         }}>
-          <span style={{ fontSize: 9, color: "#27272a", fontFamily: "monospace", letterSpacing: "0.1em" }}>
+          <span style={{ fontSize: 9, color: "#a1a1aa", fontFamily: "monospace", letterSpacing: "0.1em", textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>
             {visibleCount} nodes
           </span>
-          <span style={{ fontSize: 9, color: "#1a1a1a", fontFamily: "monospace" }}>·</span>
-          <span style={{ fontSize: 9, color: "#27272a", fontFamily: "monospace", letterSpacing: "0.1em" }}>
+          <span style={{ fontSize: 9, color: "#52525b", fontFamily: "monospace" }}>·</span>
+          <span style={{ fontSize: 9, color: "#a1a1aa", fontFamily: "monospace", letterSpacing: "0.1em", textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>
             {graphData.edges.length} edges
           </span>
         </div>
+        </div>
       </div>
 
-      <main style={{ flex: 1, overflow: "hidden", position: "relative" }}>
-        {view === "graph" ? (
-          <>
-            <KnowledgeGraph data={graphData} activeDomains={activeDomains} />
-            <StatsPanel pages={pages} graphData={graphData} activeDomains={activeDomains} onToggleDomain={toggleDomain} />
-          </>
-        ) : (
-          <div style={{ height: "100%", overflowY: "auto" }}>
-            <PageTable pages={pages} linkDegrees={linkDegrees} activeDomains={activeDomains} />
-          </div>
-        )}
-      </main>
-
-      {/* Footer — HUD status bar */}
+      {/* Footer overlay — HUD status bar */}
       {view === "graph" && (
         <footer style={{
           display: "flex", alignItems: "center",
           gap: 0,
           padding: "0 20px",
           height: 36,
-          borderTop: "1px solid rgba(255,255,255,0.04)",
-          background: "rgba(0,0,0,0.98)",
-          flexShrink: 0,
-          position: "relative",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          background: "transparent",
+          position: "absolute",
+          left: 0, right: 0, bottom: 0,
+          zIndex: 20,
+          pointerEvents: "none",
         }}>
           {/* Top gradient */}
           <div style={{
@@ -134,9 +147,10 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
             {LEGEND.map(({ label, color }) => (
               <span key={label} style={{
                 display: "flex", alignItems: "center", gap: 6,
-                fontSize: 9, color: "#3f3f46",
+                fontSize: 9, color: "#9ca3af",
                 letterSpacing: "0.08em", textTransform: "uppercase" as const,
                 fontFamily: "monospace",
+                textShadow: "0 1px 2px rgba(0,0,0,0.85)",
               }}>
                 <span style={{
                   width: 6, height: 6, borderRadius: "50%",
@@ -171,12 +185,14 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
                 fontSize: 10, letterSpacing: "0.04em", fontFamily: "monospace",
               }}>
                 <kbd style={{
-                  border: "1px solid rgba(255,255,255,0.14)", borderRadius: 3,
-                  padding: "2px 6px", fontSize: 10, color: "#71717a",
-                  fontFamily: "monospace", background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.20)", borderRadius: 3,
+                  padding: "2px 6px", fontSize: 10, color: "#d4d4d8",
+                  fontFamily: "monospace", background: "rgba(0,0,0,0.45)",
+                  backdropFilter: "blur(6px)",
                   lineHeight: 1.4,
+                  textShadow: "0 1px 2px rgba(0,0,0,0.85)",
                 }}>{action}</kbd>
-                <span style={{ color: "#52525b", fontSize: 10 }}>→ {hint}</span>
+                <span style={{ color: "#a1a1aa", fontSize: 10, textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}>→ {hint}</span>
               </span>
             ))}
           </div>
