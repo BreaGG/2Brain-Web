@@ -31,6 +31,7 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set());
   const [searchOpen, setSearchOpen]   = useState(false);
   const [isMobile, setIsMobile]       = useState(false);
+  const [handActive, setHandActive]   = useState(false);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
@@ -107,7 +108,7 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
         {/* Content area */}
         {view === "graph" ? (
           <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-            <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} />
+            <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} handActive={handActive} onHandActiveChange={setHandActive} />
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
@@ -135,8 +136,8 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
         </div>
       )}
 
-      {/* StatsPanel overlay */}
-      {view === "graph" && (
+      {/* StatsPanel overlay — hidden in hand-tracking mode */}
+      {view === "graph" && !handActive && (
         <StatsPanel pages={pages} graphData={graphData} activeDomains={activeDomains} onToggleDomain={toggleDomain} />
       )}
 
