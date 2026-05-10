@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState } from "react";
+import HandTrackingProvider from "./HandTrackingContext";
 
 type Theme = "dark" | "light";
 
@@ -35,7 +36,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider value={{ theme, toggle }}>
-      {children}
+      <HandTrackingProvider>
+        {children}
+      </HandTrackingProvider>
     </ThemeContext.Provider>
   );
 }

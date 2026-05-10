@@ -8,6 +8,7 @@ import PageTable from "@/components/list/PageTable";
 import SearchModal from "@/components/search/SearchModal";
 import Navbar from "@/components/layout/Navbar";
 import StatsPanel from "@/components/graph/StatsPanel";
+import { useHandTracking } from "@/components/HandTrackingContext";
 
 const KnowledgeGraph = dynamic(() => import("@/components/graph/KnowledgeGraph"), { ssr: false });
 
@@ -31,7 +32,7 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set());
   const [searchOpen, setSearchOpen]   = useState(false);
   const [isMobile, setIsMobile]       = useState(false);
-  const [handActive, setHandActive]   = useState(false);
+  const { active: handActive } = useHandTracking();
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
@@ -108,7 +109,7 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
         {/* Content area */}
         {view === "graph" ? (
           <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-            <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} handActive={handActive} onHandActiveChange={setHandActive} />
+            <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} />
           </div>
         ) : (
           <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>

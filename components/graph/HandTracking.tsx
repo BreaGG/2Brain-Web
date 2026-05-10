@@ -5,7 +5,6 @@ import { createPortal } from "react-dom";
 
 interface Props {
   active: boolean;
-  svgRef: React.RefObject<SVGSVGElement | null>;
   onClose: () => void;
 }
 
@@ -13,19 +12,28 @@ interface Landmark { x: number; y: number; z: number; }
 
 const PINCH_THRESHOLD = 0.055;     // normalized distance thumb-index to count as pinch
 const PINCH_RELEASE   = 0.075;     // hysteresis
-const CLICK_MAX_MS    = 320;       // pinch duration that counts as click
-const CLICK_MAX_MOVE  = 24;        // px movement allowed during click
+const CLICK_MAX_MS    = 450;       // pinch duration that counts as click
+const CLICK_MAX_MOVE  = 60;        // px movement allowed during click (finger pinch jitters)
 const ZOOM_SENS       = 1.6;       // multiplier for two-hand zoom delta
+const SCROLL_SENS     = 2.6;       // pixel scroll multiplier for vertical pinch-drag
+const FIST_HOLD_MS    = 1400;      // fist held to trigger back-navigation
 
-export default function HandTracking({ active, svgRef, onClose }: Props) {
+function findGraphSvg(): SVGSVGElement | null {
+  return document.querySelector<SVGSVGElement>("svg[data-knowledge-graph]");
+}
+
+export default function HandTracking({ active, onClose }: Props) {
   const videoRef    = useRef<HTMLVideoElement>(null);
   const canvasRef   = useRef<HTMLCanvasElement>(null);
   const cursorRef   = useRef<{ x: number; y: number } | null>(null);
   const pinchingRef = useRef(false);
-  const pinchStartRef = useRef<{ t: number; x: number; y: number; el: Element | null } | null>(null);
+  const pinchStartRef = useRef<{ t: number; x: number; y: number; el: Element | null; mode: "drag" | "scroll" } | null>(null);
   const draggedElRef  = useRef<Element | null>(null);
   const prevHoverElRef = useRef<Element | null>(null);
+  const lastPinchYRef = useRef<number | null>(null);
   const lastTwoHandDistRef = useRef<number | null>(null);
+  const fistStartRef = useRef<number | null>(null);
+  const fistProgressRef = useRef<number>(0);    // 0..1 for canvas viz
   const rafRef = useRef<number | null>(null);
   const handLandmarkerRef = useRef<unknown>(null);
 
@@ -182,30 +190,100 @@ export default function HandTracking({ active, svgRef, onClose }: Props) {
     const cy = indexTip.y * H;
     cursorRef.current = { x: cx, y: cy };
 
-    if (ctx) drawHand(ctx, hand, W, H);
-
     // Pinch detection (normalized)
     const pinchDist = Math.hypot(indexTip.x - thumbTip.x, indexTip.y - thumbTip.y);
     const wasPinching = pinchingRef.current;
+
+    /* ── Fist gesture for back-navigation (only when NOT pinching) ── */
+    if (!wasPinching && pinchDist >= PINCH_THRESHOLD) {
+      const fist = isFist(hand);
+      if (fist) {
+        if (fistStartRef.current === null) fistStartRef.current = performance.now();
+        const held = performance.now() - fistStartRef.current;
+        fistProgressRef.current = Math.min(1, held / FIST_HOLD_MS);
+        if (held >= FIST_HOLD_MS) {
+          fistStartRef.current = null;
+          fistProgressRef.current = 0;
+          window.history.back();
+          return;
+        }
+      } else {
+        fistStartRef.current = null;
+        fistProgressRef.current = 0;
+      }
+    } else {
+      fistStartRef.current = null;
+      fistProgressRef.current = 0;
+    }
+
+    if (ctx) drawHand(ctx, hand, W, H);
+
     if (!wasPinching && pinchDist < PINCH_THRESHOLD) {
-      // Pinch start
+      // Pinch start — decide drag (graph) vs scroll (page)
       pinchingRef.current = true;
       const target = elementUnder(cx, cy);
-      pinchStartRef.current = { t: performance.now(), x: cx, y: cy, el: target };
+      const onGraph = !!target?.closest("svg[data-knowledge-graph]");
+      const mode: "drag" | "scroll" = onGraph ? "drag" : "scroll";
+      pinchStartRef.current = { t: performance.now(), x: cx, y: cy, el: target, mode };
       draggedElRef.current = target;
+      lastPinchYRef.current = cy;
       synthPointer("pointerdown", target, cx, cy);
     } else if (wasPinching && pinchDist > PINCH_RELEASE) {
-      // Pinch end
       endPinch(true);
     } else if (wasPinching) {
-      // Dragging
-      const target = draggedElRef.current ?? elementUnder(cx, cy);
-      synthPointer("pointermove", target, cx, cy);
+      const start = pinchStartRef.current;
+      if (start?.mode === "scroll") {
+        // Scroll page by delta of vertical hand movement
+        const lastY = lastPinchYRef.current ?? cy;
+        const dy = (lastY - cy) * SCROLL_SENS;
+        if (Math.abs(dy) > 0.5) {
+          const scrollEl = nearestScrollable(start.el) ?? document.scrollingElement ?? document.documentElement;
+          scrollEl.scrollBy({ top: -dy, left: 0, behavior: "auto" });
+        }
+        lastPinchYRef.current = cy;
+      } else {
+        // Drag rotates graph
+        const target = draggedElRef.current ?? elementUnder(cx, cy);
+        synthPointer("pointermove", target, cx, cy);
+      }
     } else {
       // Hover (no pinch)
       const target = elementUnder(cx, cy);
       synthPointer("pointermove", target, cx, cy);
     }
+  }
+
+  function isFist(hand: Landmark[]): boolean {
+    // All four non-thumb fingers tightly folded: tip Y clearly below PIP joint
+    const pairs: [number, number][] = [[8,6],[12,10],[16,14],[20,18]];
+    let folded = 0;
+    for (const [tip, pip] of pairs) {
+      if (hand[tip].y > hand[pip].y + 0.018) folded++;
+    }
+    if (folded < 4) return false;
+    // Hand size proxy: distance wrist to middle MCP (joint 9)
+    const handSize = Math.hypot(hand[0].x - hand[9].x, hand[0].y - hand[9].y);
+    if (handSize < 0.04) return false;   // hand too far / small / unreliable
+    // Fingertips clustered near palm (small spread relative to hand size)
+    const tips = [hand[8], hand[12], hand[16], hand[20]];
+    let maxFromPalm = 0;
+    for (const t of tips) {
+      const d = Math.hypot(t.x - hand[9].x, t.y - hand[9].y);
+      if (d > maxFromPalm) maxFromPalm = d;
+    }
+    if (maxFromPalm > handSize * 1.25) return false;  // fingers extended
+    return true;
+  }
+
+  function nearestScrollable(el: Element | null): Element | null {
+    let cur: Element | null = el;
+    while (cur && cur !== document.body) {
+      const cs = getComputedStyle(cur);
+      const oy = cs.overflowY;
+      if ((oy === "auto" || oy === "scroll") && cur.scrollHeight > cur.clientHeight) return cur;
+      cur = cur.parentElement;
+    }
+    return null;
   }
 
   function endPinch(performClick: boolean) {
@@ -214,6 +292,7 @@ export default function HandTracking({ active, svgRef, onClose }: Props) {
     pinchingRef.current = false;
     pinchStartRef.current = null;
     draggedElRef.current = null;
+    lastPinchYRef.current = null;
     const c = cursorRef.current;
     if (!c) return;
     synthPointer("pointerup", dragged, c.x, c.y);
@@ -222,12 +301,12 @@ export default function HandTracking({ active, svgRef, onClose }: Props) {
       const dx = c.x - start.x, dy = c.y - start.y;
       const moved = Math.hypot(dx, dy);
       if (dt < CLICK_MAX_MS && moved < CLICK_MAX_MOVE) {
-        // Synth click on element under cursor at release
-        const target = elementUnder(c.x, c.y);
+        // Click the element pinched ON (intent), not where finger ended up
+        const target = start.el ?? elementUnder(c.x, c.y);
         if (target) {
           target.dispatchEvent(new MouseEvent("click", {
             bubbles: true, cancelable: true,
-            clientX: c.x, clientY: c.y, view: window,
+            clientX: start.x, clientY: start.y, view: window,
           }));
         }
       }
@@ -240,7 +319,7 @@ export default function HandTracking({ active, svgRef, onClose }: Props) {
   }
 
   function synthPointer(type: string, target: Element | null, x: number, y: number) {
-    const dst = target ?? svgRef.current;
+    const dst = target ?? findGraphSvg() ?? document.body;
     if (!dst) return;
     const ev = new PointerEvent(type, {
       bubbles: true, cancelable: true,
@@ -285,7 +364,7 @@ export default function HandTracking({ active, svgRef, onClose }: Props) {
   }
 
   function synthWheel(x: number, y: number, deltaY: number) {
-    const svg = svgRef.current;
+    const svg = findGraphSvg();
     if (!svg) return;
     svg.dispatchEvent(new WheelEvent("wheel", {
       bubbles: true, cancelable: true,
@@ -341,6 +420,22 @@ export default function HandTracking({ active, svgRef, onClose }: Props) {
     ctx.beginPath();
     ctx.arc(tx, ty, pinchingRef.current ? 18 : 14, 0, Math.PI * 2);
     ctx.stroke();
+
+    // Fist back-navigation progress ring (around wrist)
+    const prog = fistProgressRef.current;
+    if (prog > 0.05) {
+      const wrist = h[0];
+      const wx = (1 - wrist.x) * W, wy = wrist.y * H;
+      ctx.strokeStyle = "#fb7185";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(wx, wy, 32, -Math.PI / 2, -Math.PI / 2 + prog * Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(251,113,133,0.85)";
+      ctx.font = "bold 11px monospace";
+      ctx.textAlign = "center";
+      ctx.fillText("← BACK", wx, wy + 50);
+    }
   }
 
   if (!active) return null;
@@ -362,10 +457,10 @@ export default function HandTracking({ active, svgRef, onClose }: Props) {
           height: "100%",
           objectFit: "cover",
           transform: "scaleX(-1)",   // mirror for natural feel
-          opacity: 0.18,
+          opacity: 0.12,
           zIndex: 0,
           pointerEvents: "none",
-          filter: "saturate(0.55) contrast(1.05) brightness(0.85)",
+          filter: "saturate(0.5) contrast(1.05) brightness(0.8)",
         }}
       />
 
@@ -463,10 +558,12 @@ export default function HandTracking({ active, svgRef, onClose }: Props) {
           pointerEvents: "auto",
         }}>
           <div style={{ color: "#e4e4e7", marginBottom: 6, letterSpacing: "0.10em" }}>GESTURES</div>
-          <div>• INDEX FINGER → cursor</div>
-          <div>• PINCH (thumb+index) → click / drag</div>
-          <div>• HOLD PINCH + MOVE → rotate sphere</div>
+          <div>• INDEX FINGER → cursor / hover</div>
+          <div>• QUICK PINCH → click</div>
+          <div>• PINCH + DRAG (on graph) → rotate sphere</div>
+          <div>• PINCH + DRAG (on page) → scroll</div>
           <div>• TWO HANDS → zoom (move apart/closer)</div>
+          <div>• CLOSED FIST (hold) → go back</div>
         </div>
       )}
 

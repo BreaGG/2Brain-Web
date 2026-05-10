@@ -127,7 +127,10 @@ export default function PageView({ page, allPages }: Props) {
         )}
       </header>
 
-      <MetadataBar page={page} slugMap={slugObj} />
+      {/* Skip MetadataBar for plain index/untyped pages that have no real metadata */}
+      {!(page.type === "page" && page.domain[0] === "uncategorized" && !page.lastUpdated) && (
+        <MetadataBar page={page} slugMap={slugObj} />
+      )}
 
       <div className="prose prose-invert max-w-none">
         <ReactMarkdown

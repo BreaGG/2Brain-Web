@@ -48,8 +48,15 @@ export function parsePage(path: string, raw: string): ParsedPage {
   let lastUpdated = "";
   let metaEndLine = 0;
 
-  for (let i = 0; i < lines.length; i++) {
+  // Scan only the metadata preamble: stop at the first ## heading (which marks
+  // the start of real content). This prevents log entries like "**Type:** ingest"
+  // deep in wiki/index.md from overwriting metaEndLine and truncating bodyContent.
+  const METADATA_SCAN_LIMIT = 30;
+  for (let i = 0; i < Math.min(lines.length, METADATA_SCAN_LIMIT); i++) {
     const line = lines[i];
+
+    // Stop scanning metadata when we hit the first section heading
+    if (line.match(/^#{2,}\s/) && i > 0) break;
 
     const titleMatch = line.match(/^#\s+(.+)$/);
     if (titleMatch && !title) {

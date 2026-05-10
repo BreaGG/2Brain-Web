@@ -6,14 +6,12 @@ import { useRouter } from "next/navigation";
 import * as d3 from "d3";
 import type { GraphData, GraphNode, GraphEdge, ParsedPage } from "@/lib/types";
 import NodePreviewPanel from "./NodePreviewPanel";
-import HandTracking from "./HandTracking";
+import { useHandTracking } from "../HandTrackingContext";
 
 interface Props {
   data: GraphData;
   activeDomains: Set<string>;
   pages?: ParsedPage[];
-  handActive?: boolean;
-  onHandActiveChange?: (active: boolean) => void;
 }
 
 /* ── Node classification ── */
@@ -343,7 +341,8 @@ function easeOutQuint(t: number): number {
 }
 
 /* ── Component ── */
-export default function KnowledgeGraph({ data, activeDomains, pages, handActive: handActiveProp, onHandActiveChange }: Props) {
+export default function KnowledgeGraph({ data, activeDomains, pages }: Props) {
+  const { active: handActive } = useHandTracking();
   /* Build slug → ParsedPage map for preview lookup */
   const pageBySlug = useMemo(() => {
     const m = new Map<string, ParsedPage>();
@@ -357,13 +356,6 @@ export default function KnowledgeGraph({ data, activeDomains, pages, handActive:
   const [dims,        setDims]        = useState({ w: 800, h: 600 });
   const [zoomScale,   setZoomScale]   = useState(1);
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
-  const [handActiveLocal, setHandActiveLocal] = useState(false);
-  const handActive = handActiveProp ?? handActiveLocal;
-  const setHandActive = useCallback((v: boolean | ((p: boolean) => boolean)) => {
-    const next = typeof v === "function" ? v(handActive) : v;
-    if (onHandActiveChange) onHandActiveChange(next);
-    else setHandActiveLocal(next);
-  }, [handActive, onHandActiveChange]);
   const [mounted,     setMounted]     = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
@@ -748,13 +740,13 @@ export default function KnowledgeGraph({ data, activeDomains, pages, handActive:
   return (
     <div className="relative w-full h-full" style={{ background: handActive ? "transparent" : "#00000f" }}>
       <svg
-        ref={svgRef} width="100%" height="100%"
+        ref={svgRef} data-knowledge-graph="1" width="100%" height="100%"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onPointerLeave={onPointerUp}
-        style={{ cursor: "grab", touchAction: "none", position: "relative", zIndex: 1, opacity: handActive ? 0.95 : 1, transition: "opacity 0.4s ease" }}
+        style={{ cursor: "grab", touchAction: "none", position: "relative", zIndex: 1, opacity: 1, transition: "opacity 0.4s ease" }}
       >
         <defs>
           <filter id="glow-soft" x="-40%" y="-40%" width="180%" height="180%">
@@ -1337,14 +1329,7 @@ export default function KnowledgeGraph({ data, activeDomains, pages, handActive:
         page={hoveredNode ? pageBySlug.get(hoveredNode.id) ?? null : null}
       />
 
-      {/* Hand tracking overlay (video stays here, behind SVG via z-index) */}
-      <HandTracking
-        active={handActive}
-        svgRef={svgRef}
-        onClose={() => setHandActive(false)}
-      />
-
-      {/* Buttons portaled to body to escape nav/footer stacking context */}
+      {/* Center button portaled to body (escapes nav/footer stacking context) */}
       {mounted && createPortal(<>
       <button
         onClick={centerView}
@@ -1390,56 +1375,6 @@ export default function KnowledgeGraph({ data, activeDomains, pages, handActive:
           <line x1="2"  y1="12" x2="5"  y2="12" />
           <line x1="19" y1="12" x2="22" y2="12" />
           <circle cx="12" cy="12" r="1.4" fill="currentColor" stroke="none" />
-        </svg>
-      </button>
-
-      {/* Hand-tracking toggle button (above center button) */}
-      <button
-        onClick={() => setHandActive((v) => !v)}
-        title={handActive ? "Disable hand tracking" : "Enable hand tracking"}
-        style={{
-          position: "fixed",
-          bottom: 108,
-          left: 24,
-          zIndex: 9999,
-          width: 38,
-          height: 38,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: handActive ? "rgba(79,156,249,0.18)" : "rgba(2,4,10,0.85)",
-          border: handActive ? "1px solid rgba(79,156,249,0.55)" : "1px solid rgba(255,255,255,0.10)",
-          borderRadius: 5,
-          color: handActive ? "#4f9cf9" : "#a1a1aa",
-          cursor: "pointer",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
-          transition: "all 0.15s",
-          boxShadow: handActive
-            ? "0 0 0 1px rgba(79,156,249,0.30), 0 0 22px rgba(79,156,249,0.30), 0 8px 24px rgba(0,0,0,0.6)"
-            : "0 0 0 1px rgba(255,255,255,0.02), 0 8px 24px rgba(0,0,0,0.6)",
-        }}
-        onMouseEnter={(e) => {
-          if (handActive) return;
-          e.currentTarget.style.borderColor = "rgba(79,156,249,0.45)";
-          e.currentTarget.style.color = "#fff";
-          e.currentTarget.style.background = "rgba(79,156,249,0.10)";
-          e.currentTarget.style.boxShadow = "0 0 0 1px rgba(79,156,249,0.20), 0 0 18px rgba(79,156,249,0.18), 0 8px 24px rgba(0,0,0,0.6)";
-        }}
-        onMouseLeave={(e) => {
-          if (handActive) return;
-          e.currentTarget.style.borderColor = "rgba(255,255,255,0.10)";
-          e.currentTarget.style.color = "#a1a1aa";
-          e.currentTarget.style.background = "rgba(2,4,10,0.85)";
-          e.currentTarget.style.boxShadow = "0 0 0 1px rgba(255,255,255,0.02), 0 8px 24px rgba(0,0,0,0.6)";
-        }}
-      >
-        {/* Hand icon */}
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 11V5.5a1.5 1.5 0 1 1 3 0V11" />
-          <path d="M12 11V4.5a1.5 1.5 0 1 1 3 0V11" />
-          <path d="M15 11V6.5a1.5 1.5 0 1 1 3 0V13" />
-          <path d="M9 11V8.5a1.5 1.5 0 1 0-3 0v6.2c0 2.7 2 5.3 5 6.3 1.5.5 3 .5 4.5 0 2.4-.8 4.5-3 4.5-6.3V11" />
         </svg>
       </button>
 

@@ -1,3 +1,5 @@
+"use client";
+
 import type { ParsedPage } from "@/lib/types";
 import Link from "next/link";
 
