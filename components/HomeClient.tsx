@@ -195,32 +195,38 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
         <div style={{
           marginLeft: "auto",
           display: "flex", alignItems: "center", gap: 10,
-          padding: "6px 14px",
-          background: "rgba(7,11,26,0.4)",
-          backdropFilter: "blur(22px) saturate(140%)",
-          WebkitBackdropFilter: "blur(22px) saturate(140%)",
-          border: "1px solid rgba(140,180,255,0.14)",
-          borderRadius: 8,
-          boxShadow: "0 4px 14px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)",
+          padding: "6px 4px",
+          background: "transparent",
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          position: "relative", overflow: "hidden",
         }}>
           <span style={{
-            position: "absolute", top: 0, left: 10, right: 10, height: 1,
-            background: "linear-gradient(90deg, transparent, rgba(140,180,255,0.55), transparent)",
-            pointerEvents: "none",
-          }} />
-          <span style={{ fontSize: 8, color: "rgba(140,160,200,0.55)", letterSpacing: "0.22em", fontWeight: 700 }}>
+            fontSize: 8, color: "rgba(200,215,255,0.78)",
+            letterSpacing: "0.22em", fontWeight: 700,
+            textShadow: "0 1px 4px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85)",
+          }}>
             SIG
           </span>
-          <span style={{ fontSize: 11, color: "#67e8f9", fontWeight: 700, textShadow: "0 0 10px rgba(103,232,249,0.55)" }}>
+          <span style={{
+            fontSize: 12, color: "#67e8f9", fontWeight: 700,
+            textShadow: "0 0 12px rgba(103,232,249,0.85), 0 0 3px rgba(103,232,249,0.6), 0 1px 4px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.7)",
+          }}>
             {String(visibleCount).padStart(3, "0")}
           </span>
-          <span style={{ fontSize: 9, color: "rgba(140,160,200,0.4)" }}>·</span>
-          <span style={{ fontSize: 11, color: "#a78bfa", fontWeight: 700, textShadow: "0 0 10px rgba(167,139,250,0.55)" }}>
+          <span style={{
+            fontSize: 10, color: "rgba(200,215,255,0.6)",
+            textShadow: "0 1px 4px rgba(0,0,0,0.95)",
+          }}>·</span>
+          <span style={{
+            fontSize: 12, color: "#a78bfa", fontWeight: 700,
+            textShadow: "0 0 12px rgba(167,139,250,0.85), 0 0 3px rgba(167,139,250,0.6), 0 1px 4px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.7)",
+          }}>
             {String(graphData.edges.length).padStart(3, "0")}
           </span>
-          <span style={{ fontSize: 8, color: "rgba(140,160,200,0.55)", letterSpacing: "0.18em" }}>
+          <span style={{
+            fontSize: 8, color: "rgba(200,215,255,0.78)",
+            letterSpacing: "0.22em", fontWeight: 700,
+            textShadow: "0 1px 4px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85)",
+          }}>
             LNK
           </span>
         </div>

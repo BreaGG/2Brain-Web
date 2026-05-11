@@ -651,7 +651,11 @@ function easeInOutCubic(t: number): number {
 
 interface FrameTarget { camPos: THREE.Vector3; target: THREE.Vector3; duration: number; }
 
-function CameraFramer({ tick, request }: { tick: number; request: FrameTarget | null }) {
+function CameraFramer({ tick, request, framingActiveRef }: {
+  tick: number;
+  request: FrameTarget | null;
+  framingActiveRef: React.RefObject<boolean>;
+}) {
   const { camera } = useThree();
   const tweenRef = useRef<{
     start: number; duration: number;
@@ -661,7 +665,6 @@ function CameraFramer({ tick, request }: { tick: number; request: FrameTarget | 
 
   useEffect(() => {
     if (!request) return;
-    // Read current target from drei controls (camera.userData.target stashed)
     const controls = (camera as unknown as { userData?: { target?: THREE.Vector3 } }).userData;
     const currentTarget = controls?.target?.clone() ?? new THREE.Vector3(0, 0, 0);
     tweenRef.current = {
@@ -672,6 +675,7 @@ function CameraFramer({ tick, request }: { tick: number; request: FrameTarget | 
       fromTarget: currentTarget,
       toTarget: request.target.clone(),
     };
+    framingActiveRef.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tick]);
 
@@ -683,7 +687,10 @@ function CameraFramer({ tick, request }: { tick: number; request: FrameTarget | 
     camera.position.lerpVectors(tw.fromPos, tw.toPos, e);
     const tgt = (camera as unknown as { userData: { target: THREE.Vector3 } }).userData.target;
     tgt.lerpVectors(tw.fromTarget, tw.toTarget, e);
-    if (t >= 1) tweenRef.current = null;
+    if (t >= 1) {
+      tweenRef.current = null;
+      framingActiveRef.current = false;
+    }
   });
   return null;
 }
@@ -714,11 +721,12 @@ function ControlsBridge({ controlsRef }: { controlsRef: React.RefObject<Trackbal
 // nudge targetDistRef. This decouples input cadence from frame cadence, producing
 // weighty cinematic zoom regardless of trackpad event rate.
 function SmoothZoom({
-  controlsRef, targetDistRef, currentDistRef,
+  controlsRef, targetDistRef, currentDistRef, framingActiveRef,
 }: {
   controlsRef: React.RefObject<TrackballHandle | null>;
   targetDistRef: React.RefObject<number>;
   currentDistRef: React.RefObject<number>;
+  framingActiveRef: React.RefObject<boolean>;
 }) {
   const { camera } = useThree();
 
@@ -727,18 +735,22 @@ function SmoothZoom({
     if (!c) return;
     const target = c.target;
 
-    // Initialize current distance lazily
+    // Pause during cinematic framing tween — CameraFramer owns camera.position.
+    // Keep currentDistRef synced to actual distance so resume is seamless.
+    if (framingActiveRef.current) {
+      currentDistRef.current = camera.position.distanceTo(target);
+      return;
+    }
+
     if (currentDistRef.current == null || currentDistRef.current <= 0) {
       currentDistRef.current = camera.position.distanceTo(target);
     }
 
-    // Exponential ease toward target distance (perceptually linear at all scales)
     const cur = currentDistRef.current;
     const goal = targetDistRef.current ?? ZOOM_DEFAULT;
     const next = cur + (goal - cur) * 0.11;
     currentDistRef.current = next;
 
-    // Preserve current direction (set by user rotation), just adjust distance
     const dir = camera.position.clone().sub(target);
     const len = dir.length();
     if (len < 0.0001) return;
@@ -773,17 +785,88 @@ function IdleDrift({
   return null;
 }
 
+// ── Big Bang: galaxy expands from singularity on mount ────────────────────
+const BIGBANG_DURATION_MS = 2000;
+
+function BigBangGroup({ children, startedAtRef }: {
+  children: React.ReactNode;
+  startedAtRef: React.RefObject<number | null>;
+}) {
+  const ref = useRef<THREE.Group>(null);
+  useFrame(() => {
+    if (!ref.current) return;
+    if (startedAtRef.current == null) startedAtRef.current = performance.now();
+    const t = Math.min(1, (performance.now() - startedAtRef.current) / BIGBANG_DURATION_MS);
+    // easeOutCubic
+    const e = 1 - Math.pow(1 - t, 3);
+    const s = 0.001 + e * 0.999;
+    ref.current.scale.setScalar(s);
+  });
+  return <group ref={ref} scale={0.001}>{children}</group>;
+}
+
+function BigBangFlash() {
+  const sphereRef = useRef<THREE.Mesh>(null);
+  const haloRef = useRef<THREE.Sprite>(null);
+  const matRef = useRef<THREE.MeshBasicMaterial>(null);
+  const haloMatRef = useRef<THREE.SpriteMaterial>(null);
+  const tex = useMemo(() => makeGlowTexture(), []);
+  const startRef = useRef<number | null>(null);
+
+  useFrame(() => {
+    if (startRef.current == null) startRef.current = performance.now();
+    const t = Math.min(1, (performance.now() - startRef.current) / 1500);
+    // Expand fast, fade smoothly
+    const expand = 0.5 + Math.pow(t, 0.55) * 70;
+    const opacity = Math.max(0, Math.pow(1 - t, 2.2) * 1.8);
+    const haloOpacity = Math.max(0, Math.pow(1 - t, 1.8) * 1.0);
+    if (sphereRef.current) sphereRef.current.scale.setScalar(expand * 0.45);
+    if (haloRef.current)   haloRef.current.scale.setScalar(expand);
+    if (matRef.current)     matRef.current.opacity = opacity;
+    if (haloMatRef.current) haloMatRef.current.opacity = haloOpacity;
+  });
+
+  return (
+    <group>
+      <mesh ref={sphereRef}>
+        <sphereGeometry args={[1, 32, 32]} />
+        <meshBasicMaterial
+          ref={matRef}
+          color="#ffffff"
+          transparent
+          opacity={1}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </mesh>
+      <sprite ref={haloRef} scale={[1, 1, 1]}>
+        <spriteMaterial
+          ref={haloMatRef}
+          map={tex}
+          color="#cdb8ff"
+          transparent
+          opacity={1}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+        />
+      </sprite>
+    </group>
+  );
+}
+
 // ── Scene ─────────────────────────────────────────────────────────────────
 function Scene({
   data, activeDomains, onPick, hoveredId, selectedId, setHoveredId,
-  framerTick, framerRequest,
-  controlsRef,
+  framerTick, framerRequest, framingActiveRef,
+  controlsRef, bigBangStartRef,
 }: Props & {
   onPick: (slug: string) => void;
   hoveredId: string | null; selectedId: string | null;
   setHoveredId: (id: string | null) => void;
   framerTick: number; framerRequest: FrameTarget | null;
+  framingActiveRef: React.RefObject<boolean>;
   controlsRef: React.RefObject<TrackballHandle | null>;
+  bigBangStartRef: React.RefObject<number | null>;
 }) {
   const layout = useMemo(() => buildLayout(data), [data]);
   const visibleNodes = useMemo(() => {
@@ -832,39 +915,45 @@ function Scene({
       <Nebula />
       <Dust count={220} />
 
-      <Edges edges={visibleEdges} positions={layout.positions} hoveredId={hoveredId} selectedId={selectedId} />
+      {/* Big Bang flash — outside expansion group, rendered at origin in world */}
+      <BigBangFlash />
 
-      {items.map((it, idx) => {
-        const isHovered  = hoveredId === it.node.id;
-        const isSelected = selectedId === it.node.id;
-        const isHL       = isHovered || isSelected;
-        const dim        = !!focused && !isHL && !neighborIds.has(it.node.id);
+      {/* Galaxy content — scales from singularity to full size */}
+      <BigBangGroup startedAtRef={bigBangStartRef}>
+        <Edges edges={visibleEdges} positions={layout.positions} hoveredId={hoveredId} selectedId={selectedId} />
 
-        if (it.cls === "core") {
+        {items.map((it, idx) => {
+          const isHovered  = hoveredId === it.node.id;
+          const isSelected = selectedId === it.node.id;
+          const isHL       = isHovered || isSelected;
+          const dim        = !!focused && !isHL && !neighborIds.has(it.node.id);
+
+          if (it.cls === "core") {
+            return (
+              <GalaxyCore
+                key={it.node.id}
+                position={it.position}
+                hovered={isHovered}
+                selected={isSelected}
+                dim={dim}
+                onHover={(h) => setHoveredId(h ? it.node.id : null)}
+                onSelect={() => onPick(it.node.id)}
+                glowTex={glowTex}
+              />
+            );
+          }
           return (
-            <GalaxyCore
-              key={it.node.id}
-              position={it.position}
-              hovered={isHovered}
-              selected={isSelected}
-              dim={dim}
-              onHover={(h) => setHoveredId(h ? it.node.id : null)}
-              onSelect={() => onPick(it.node.id)}
-              glowTex={glowTex}
+            <StandardNode
+              key={it.node.id} item={it} idx={idx} glowTex={glowTex}
+              hovered={isHovered} selected={isSelected} dim={dim}
+              onHover={setHoveredId} onSelect={() => onPick(it.node.id)}
             />
           );
-        }
-        return (
-          <StandardNode
-            key={it.node.id} item={it} idx={idx} glowTex={glowTex}
-            hovered={isHovered} selected={isSelected} dim={dim}
-            onHover={setHoveredId} onSelect={() => onPick(it.node.id)}
-          />
-        );
-      })}
+        })}
+      </BigBangGroup>
 
       <ControlsBridge controlsRef={controlsRef} />
-      <CameraFramer tick={framerTick} request={framerRequest} />
+      <CameraFramer tick={framerTick} request={framerRequest} framingActiveRef={framingActiveRef} />
     </>
   );
 }
@@ -905,11 +994,13 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
   const [framerTick, setFramerTick] = useState(0);
   const [framerRequest, setFramerRequest] = useState<FrameTarget | null>(null);
   const controlsRef    = useRef<TrackballHandle | null>(null);
-  const wrapperRef     = useRef<HTMLDivElement | null>(null);
-  const targetDistRef  = useRef<number>(ZOOM_DEFAULT);
-  const currentDistRef = useRef<number>(ZOOM_DEFAULT);
-  const idleSpeedRef   = useRef<number>(0);
-  const lastTapRef     = useRef<number>(0);
+  const wrapperRef       = useRef<HTMLDivElement | null>(null);
+  const targetDistRef    = useRef<number>(ZOOM_DEFAULT);
+  const currentDistRef   = useRef<number>(ZOOM_DEFAULT);
+  const idleSpeedRef     = useRef<number>(0);
+  const lastTapRef       = useRef<number>(0);
+  const framingActiveRef = useRef<boolean>(false);
+  const bigBangStartRef  = useRef<number | null>(null);
   const lastInteractRef = useRef<number>(Date.now());
 
   useEffect(() => {
@@ -989,12 +1080,16 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
     bumpInteract();
   }
 
-  // Center button → cinematic camera reset to galaxy core
+  // Center button → cinematic wide-shot of entire galaxy
   function centerGalaxy() {
+    const FAR = 95;
+    // Sync zoom target so SmoothZoom doesn't pull camera back after framer ends
+    targetDistRef.current = FAR;
+    currentDistRef.current = FAR;
     setFramerRequest({
-      camPos: new THREE.Vector3(0, 8, 38),
+      camPos: new THREE.Vector3(0, 22, FAR),
       target: new THREE.Vector3(0, 0, 0),
-      duration: 1400,
+      duration: 2200,
     });
     setFramerTick((t) => t + 1);
     bumpInteract();
@@ -1037,7 +1132,9 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
             setHoveredId={(id) => { setHoveredId(id); bumpInteract(); }}
             framerTick={framerTick}
             framerRequest={framerRequest}
+            framingActiveRef={framingActiveRef}
             controlsRef={controlsRef}
+            bigBangStartRef={bigBangStartRef}
           />
 
           {/* TrackballControls: free 360° rotation in all axes — feels like
@@ -1062,6 +1159,7 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
             controlsRef={controlsRef}
             targetDistRef={targetDistRef}
             currentDistRef={currentDistRef}
+            framingActiveRef={framingActiveRef}
           />
           <IdleDrift controlsRef={controlsRef} idle={idle} speedRef={idleSpeedRef} />
 
@@ -1088,7 +1186,7 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
         idle={idle}
       />
       <CenterButton onCenter={centerGalaxy} />
-      <GestureHints />
+      <CenterTransition tick={framerTick} />
     </div>
   );
 }
@@ -1115,105 +1213,87 @@ function Telemetry({ nodeCount, edgeCount, hovered, selected, idle }: {
   const animNodes = useCountUp(nodeCount, 1000);
   const animEdges = useCountUp(edgeCount, 1100);
 
+  const TS = "0 1px 4px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85), 0 0 28px rgba(0,0,0,0.55)";
   return (
     <div style={{
       position: "absolute",
       bottom: 50, right: 28,
       pointerEvents: "none",
       zIndex: 11,
-      minWidth: 220,
+      minWidth: 200,
+      background: "transparent",
     }}>
+      {/* Header */}
       <div style={{
-        position: "relative",
-        background: "rgba(7,11,26,0.45)",
-        backdropFilter: "blur(22px) saturate(140%)",
-        WebkitBackdropFilter: "blur(22px) saturate(140%)",
-        border: "1px solid rgba(140,180,255,0.14)",
-        borderRadius: 8,
-        padding: "12px 16px 12px 16px",
-        boxShadow: "0 8px 32px rgba(0,0,0,0.40), 0 0 0 1px rgba(120,160,255,0.04), inset 0 1px 0 rgba(255,255,255,0.05)",
-        overflow: "hidden",
+        display: "flex", alignItems: "center", gap: 8, marginBottom: 10,
       }}>
-        {/* Top scanning line */}
-        <div style={{
-          position: "absolute", top: 0, left: 10, right: 10, height: 1,
-          background: "linear-gradient(90deg, transparent, rgba(140,180,255,0.55), transparent)",
+        <span style={{
+          width: 6, height: 6, borderRadius: "50%",
+          background: idle ? "#a78bfa" : "#67e8f9",
+          boxShadow: `0 0 10px ${idle ? "#a78bfacc" : "#67e8f9cc"}, 0 0 3px ${idle ? "#a78bfa" : "#67e8f9"}, 0 0 14px rgba(0,0,0,0.85)`,
+          animation: "pulse 2s ease-in-out infinite",
+          flexShrink: 0,
         }} />
-        {/* Corner ticks */}
-        <span style={{ position: "absolute", top: 4,  left: 4,  width: 6, height: 6, borderTop: "1px solid rgba(140,180,255,0.55)", borderLeft: "1px solid rgba(140,180,255,0.55)" }} />
-        <span style={{ position: "absolute", top: 4,  right: 4, width: 6, height: 6, borderTop: "1px solid rgba(140,180,255,0.55)", borderRight: "1px solid rgba(140,180,255,0.55)" }} />
-        <span style={{ position: "absolute", bottom: 4, left: 4,  width: 6, height: 6, borderBottom: "1px solid rgba(140,180,255,0.55)", borderLeft: "1px solid rgba(140,180,255,0.55)" }} />
-        <span style={{ position: "absolute", bottom: 4, right: 4, width: 6, height: 6, borderBottom: "1px solid rgba(140,180,255,0.55)", borderRight: "1px solid rgba(140,180,255,0.55)" }} />
-
-        {/* Header */}
-        <div style={{
-          display: "flex", alignItems: "center", gap: 8, marginBottom: 8,
-        }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: "50%",
-            background: idle ? "#a78bfa" : "#67e8f9",
-            boxShadow: `0 0 8px ${idle ? "#a78bfaaa" : "#67e8f9aa"}`,
-            animation: "pulse 2s ease-in-out infinite",
-          }} />
-          <span style={{
-            fontSize: 9, fontWeight: 700, letterSpacing: "0.16em",
-            color: "rgba(200,215,255,0.9)",
-            fontFamily: "ui-monospace, 'SF Mono', monospace",
-          }}>
-            GALAXY · {idle ? "DRIFT" : "ACTIVE"}
-          </span>
-        </div>
-
-        {/* Metrics row */}
-        <div style={{
-          display: "grid", gridTemplateColumns: "1fr 1fr",
-          gap: "4px 16px", marginBottom: 10,
-        }}>
-          <MetricMini label="NODES" value={Math.round(animNodes)} accent="#67e8f9" />
-          <MetricMini label="LINKS" value={Math.round(animEdges)} accent="#a78bfa" />
-        </div>
-
-        {/* Context line */}
-        <div style={{
-          paddingTop: 8,
-          borderTop: "1px solid rgba(140,180,255,0.08)",
+        <span style={{
+          fontSize: 9.5, fontWeight: 700, letterSpacing: "0.18em",
+          color: "#e8eeff",
           fontFamily: "ui-monospace, 'SF Mono', monospace",
-          fontSize: 9, letterSpacing: "0.12em",
-          color: "rgba(180,200,240,0.55)",
-          lineHeight: 1.6,
-          minHeight: 28,
+          textShadow: TS,
         }}>
-          {selected ? (
-            <div style={{ color: "rgba(220,225,255,0.95)" }}>▸ SEL · {selected.slice(0, 28).toUpperCase()}</div>
-          ) : hovered ? (
-            <div style={{ color: "rgba(200,215,255,0.85)" }}>◇ HOV · {hovered.slice(0, 28).toUpperCase()}</div>
-          ) : (
-            <div style={{ opacity: 0.55 }}>{idle ? "◌ AUTO-ORBIT ENGAGED" : "◌ AWAITING INPUT"}</div>
-          )}
-        </div>
+          GALAXY · {idle ? "DRIFT" : "ACTIVE"}
+        </span>
       </div>
 
-      {/* Inject pulse keyframes once */}
+      {/* Metrics row */}
+      <div style={{
+        display: "grid", gridTemplateColumns: "1fr 1fr",
+        gap: "4px 16px", marginBottom: 10,
+      }}>
+        <MetricMini label="NODES" value={Math.round(animNodes)} accent="#67e8f9" />
+        <MetricMini label="LINKS" value={Math.round(animEdges)} accent="#a78bfa" />
+      </div>
+
+      {/* Context line */}
+      <div style={{
+        paddingTop: 8,
+        borderTop: "1px solid rgba(140,180,255,0.18)",
+        fontFamily: "ui-monospace, 'SF Mono', monospace",
+        fontSize: 9, letterSpacing: "0.14em",
+        lineHeight: 1.6,
+        minHeight: 24,
+        textShadow: TS,
+      }}>
+        {selected ? (
+          <div style={{ color: "#ffffff", fontWeight: 700 }}>▸ SEL · {selected.slice(0, 28).toUpperCase()}</div>
+        ) : hovered ? (
+          <div style={{ color: "#e8eeff", fontWeight: 600 }}>◇ HOV · {hovered.slice(0, 28).toUpperCase()}</div>
+        ) : (
+          <div style={{ color: "rgba(220,228,255,0.78)", fontWeight: 600 }}>{idle ? "◌ AUTO-ORBIT ENGAGED" : "◌ AWAITING INPUT"}</div>
+        )}
+      </div>
+
       <style>{`@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
     </div>
   );
 }
 
 function MetricMini({ label, value, accent }: { label: string; value: number | string; accent: string }) {
+  const TS = "0 1px 4px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85), 0 0 28px rgba(0,0,0,0.55)";
   return (
     <div>
       <div style={{
-        fontSize: 7.5, fontWeight: 700, letterSpacing: "0.18em",
-        color: "rgba(150,170,210,0.55)",
+        fontSize: 7.5, fontWeight: 700, letterSpacing: "0.22em",
+        color: "rgba(200,215,255,0.85)",
         fontFamily: "ui-monospace, 'SF Mono', monospace",
-        marginBottom: 2,
+        marginBottom: 3,
+        textShadow: TS,
       }}>{label}</div>
       <div style={{
         fontSize: 18, fontWeight: 700,
         color: accent,
         fontFamily: "ui-monospace, 'SF Mono', monospace",
         letterSpacing: "-0.01em", lineHeight: 1,
-        textShadow: `0 0 12px ${accent}66`,
+        textShadow: `0 0 14px ${accent}cc, 0 0 4px ${accent}88, ${TS}`,
       }}>{String(value).padStart(3, "0")}</div>
     </div>
   );
@@ -1284,131 +1364,117 @@ function CenterButton({ onCenter }: { onCenter: () => void }) {
   );
 }
 
-// ── HUD: Gesture hints (subtle interaction cues) ──────────────────────────
-function GestureHints() {
-  const [collapsed, setCollapsed] = useState(false);
-  // Auto-collapse after 8s if user hasn't dismissed
+// ── HUD: Center transition (elegant subtle pulse on recenter) ────────────
+// Triggered each time framerTick changes (i.e. CenterButton / double-tap).
+// Renders an expanding HUD reticle + radial scrim that fades over ~1.8s.
+function CenterTransition({ tick }: { tick: number }) {
+  const [active, setActive] = useState(false);
   useEffect(() => {
-    const t = setTimeout(() => setCollapsed(true), 9000);
+    if (tick === 0) return;
+    setActive(true);
+    const t = setTimeout(() => setActive(false), 2000);
     return () => clearTimeout(t);
-  }, []);
-
-  const HINTS: { icon: React.ReactNode; label: string; sub: string }[] = [
-    {
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M6 8h12" />
-          <path d="M3 11l3-3-3-3" transform="rotate(180 4.5 8)" />
-          <path d="M21 11l-3-3 3-3" transform="rotate(180 19.5 8)" />
-          <path d="M9 14a3 3 0 006 0" />
-        </svg>
-      ),
-      label: "PINCH", sub: "ZOOM",
-    },
-    {
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="8" />
-          <path d="M12 4a8 8 0 010 16" />
-          <path d="M12 8v8" />
-        </svg>
-      ),
-      label: "DRAG", sub: "ROTATE",
-    },
-    {
-      icon: (
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="3" />
-          <circle cx="12" cy="12" r="8" opacity="0.55" />
-          <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
-        </svg>
-      ),
-      label: "DBL-TAP", sub: "CENTER",
-    },
-  ];
+  }, [tick]);
 
   return (
-    <div style={{
-      position: "absolute",
-      bottom: 50, left: "50%",
-      transform: `translate(calc(-50% + 0px), ${collapsed ? 64 : 110}px)`,
-      transition: "transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.5s",
-      zIndex: 10,
-      pointerEvents: "auto",
-      opacity: collapsed ? 0.55 : 1,
-    }}>
+    <div
+      style={{
+        position: "absolute", inset: 0,
+        pointerEvents: "none",
+        zIndex: 9,
+        opacity: active ? 1 : 0,
+        transition: "opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
+      }}
+    >
+      {/* Soft cyan radial scrim that breathes from center */}
       <div
-        onMouseEnter={() => setCollapsed(false)}
+        key={`scrim-${tick}`}
         style={{
-          position: "relative",
-          display: "flex", alignItems: "center", gap: 0,
-          background: "rgba(7,11,26,0.42)",
-          backdropFilter: "blur(22px) saturate(140%)",
-          WebkitBackdropFilter: "blur(22px) saturate(140%)",
-          border: "1px solid rgba(140,180,255,0.14)",
-          borderRadius: 999,
-          padding: "6px 8px",
-          boxShadow: "0 8px 24px rgba(0,0,0,0.45), 0 0 18px rgba(167,139,250,0.10), inset 0 1px 0 rgba(255,255,255,0.04)",
-          overflow: "hidden",
+          position: "absolute", inset: 0,
+          background: "radial-gradient(circle at 50% 50%, rgba(103,232,249,0.10) 0%, rgba(167,139,250,0.05) 30%, transparent 60%)",
+          animation: active ? "centerScrim 1.6s cubic-bezier(0.16, 1, 0.3, 1) both" : "none",
+        }}
+      />
+      {/* Reticle: crosshair with expanding ring + brackets */}
+      <div
+        key={`reticle-${tick}`}
+        style={{
+          position: "absolute",
+          top: "50%", left: "50%",
+          width: 220, height: 220,
+          marginLeft: -110, marginTop: -110,
+          animation: active ? "centerReticle 1.6s cubic-bezier(0.16, 1, 0.3, 1) both" : "none",
         }}
       >
-        {/* Top scan line */}
-        <span style={{
-          position: "absolute", top: 0, left: 16, right: 16, height: 1,
-          background: "linear-gradient(90deg, transparent, rgba(140,180,255,0.55), transparent)",
-          pointerEvents: "none",
-        }} />
-        {HINTS.map((h, i) => (
-          <div key={h.label} style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "3px 12px",
-            borderRight: i < HINTS.length - 1 ? "1px solid rgba(140,180,255,0.08)" : "none",
-            color: "rgba(200,215,255,0.85)",
-            fontFamily: "ui-monospace, 'SF Mono', monospace",
-          }}>
-            <span style={{
-              display: "inline-flex", alignItems: "center",
-              color: "#67e8f9",
-              filter: "drop-shadow(0 0 5px rgba(103,232,249,0.7))",
-            }}>{h.icon}</span>
-            <span style={{
-              fontSize: 8.5, fontWeight: 700,
-              letterSpacing: "0.18em",
-              color: "rgba(224,231,255,0.92)",
-            }}>{h.label}</span>
-            <span style={{
-              fontSize: 8, color: "rgba(140,160,200,0.55)",
-              letterSpacing: "0.16em",
-            }}>→ {h.sub}</span>
-          </div>
-        ))}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          title={collapsed ? "Show gestures" : "Hide gestures"}
-          style={{
-            marginLeft: 4,
-            width: 22, height: 22,
-            border: "1px solid rgba(140,180,255,0.18)",
-            background: "rgba(7,11,26,0.55)",
-            borderRadius: "50%",
-            color: "rgba(180,200,240,0.72)",
-            fontSize: 11, lineHeight: 1, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            fontFamily: "ui-monospace, monospace",
-            transition: "all 0.18s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = "rgba(167,139,250,0.55)";
-            e.currentTarget.style.color = "#e0e7ff";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = "rgba(140,180,255,0.18)";
-            e.currentTarget.style.color = "rgba(180,200,240,0.72)";
-          }}
-        >
-          {collapsed ? "?" : "×"}
-        </button>
+        <svg viewBox="0 0 220 220" width="220" height="220" style={{ overflow: "visible" }}>
+          {/* Outer expanding ring */}
+          <circle cx="110" cy="110" r="46" fill="none"
+            stroke="#67e8f9" strokeWidth="1" opacity="0.85"
+            style={{ filter: "drop-shadow(0 0 8px rgba(103,232,249,0.85))" }} />
+          {/* Inner thin ring */}
+          <circle cx="110" cy="110" r="22" fill="none"
+            stroke="#a78bfa" strokeWidth="0.8" opacity="0.7"
+            strokeDasharray="2 3"
+            style={{ filter: "drop-shadow(0 0 6px rgba(167,139,250,0.75))" }} />
+          {/* Crosshair */}
+          <line x1="110" y1="6"   x2="110" y2="34"  stroke="#e0e7ff" strokeWidth="1" opacity="0.85" />
+          <line x1="110" y1="186" x2="110" y2="214" stroke="#e0e7ff" strokeWidth="1" opacity="0.85" />
+          <line x1="6"   y1="110" x2="34"  y2="110" stroke="#e0e7ff" strokeWidth="1" opacity="0.85" />
+          <line x1="186" y1="110" x2="214" y2="110" stroke="#e0e7ff" strokeWidth="1" opacity="0.85" />
+          {/* Center dot */}
+          <circle cx="110" cy="110" r="2" fill="#ffffff"
+            style={{ filter: "drop-shadow(0 0 6px rgba(224,231,255,1))" }} />
+          {/* Corner brackets */}
+          {[
+            ["M50,70 L50,50 L70,50",        "tl"],
+            ["M170,50 L190,50 L190,70",     "tr"],
+            ["M50,150 L50,170 L70,170",     "bl"],
+            ["M170,170 L190,170 L190,150",  "br"],
+          ].map(([d, k]) => (
+            <path key={k} d={d} fill="none" stroke="#67e8f9"
+              strokeWidth="1.2" opacity="0.85"
+              style={{ filter: "drop-shadow(0 0 6px rgba(103,232,249,0.85))" }} />
+          ))}
+        </svg>
       </div>
+
+      {/* Status label */}
+      <div
+        key={`label-${tick}`}
+        style={{
+          position: "absolute",
+          top: "calc(50% + 130px)", left: "50%",
+          transform: "translateX(-50%)",
+          fontSize: 10, fontWeight: 700, letterSpacing: "0.32em",
+          fontFamily: "ui-monospace, 'SF Mono', monospace",
+          color: "#e0e7ff",
+          textShadow: "0 0 12px rgba(103,232,249,0.85), 0 1px 4px rgba(0,0,0,0.95), 0 0 24px rgba(0,0,0,0.7)",
+          animation: active ? "centerLabel 1.8s cubic-bezier(0.16, 1, 0.3, 1) both" : "none",
+          whiteSpace: "nowrap",
+        }}
+      >
+        RECENTERING · GALAXY
+      </div>
+
+      <style>{`
+        @keyframes centerScrim {
+          0%   { opacity: 0;    transform: scale(1.4); }
+          25%  { opacity: 1;    transform: scale(1); }
+          100% { opacity: 0;    transform: scale(1.6); }
+        }
+        @keyframes centerReticle {
+          0%   { opacity: 0; transform: scale(0.55) rotate(-8deg); }
+          25%  { opacity: 1; transform: scale(1)    rotate(0deg);  }
+          75%  { opacity: 1; transform: scale(1.04) rotate(0deg);  }
+          100% { opacity: 0; transform: scale(1.6)  rotate(4deg);  }
+        }
+        @keyframes centerLabel {
+          0%   { opacity: 0; letter-spacing: 0.18em; transform: translateX(-50%) translateY(6px); }
+          25%  { opacity: 1; letter-spacing: 0.32em; transform: translateX(-50%) translateY(0); }
+          75%  { opacity: 1; letter-spacing: 0.36em; }
+          100% { opacity: 0; letter-spacing: 0.44em; transform: translateX(-50%) translateY(-2px); }
+        }
+      `}</style>
     </div>
   );
 }
