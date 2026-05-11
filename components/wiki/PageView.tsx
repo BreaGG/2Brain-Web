@@ -10,11 +10,12 @@ interface Props {
   allPages: ParsedPage[];
 }
 
+// Subtle type accent — used sparingly for the small label only
 const TYPE_COLORS: Record<string, string> = {
-  concept:          "#4f9cf9",
-  person:           "#4ade80",
-  "source-summary": "#facc15",
-  synthesis:        "#c084fc",
+  concept:          "#7dd3fc",
+  person:           "#67e8f9",
+  "source-summary": "#c4b5fd",
+  synthesis:        "#a78bfa",
 };
 
 function resolveWikiLinksInText(text: string, slugMap: Map<string, string>): React.ReactNode[] {
@@ -33,7 +34,7 @@ function resolveWikiLinksInText(text: string, slugMap: Map<string, string>): Rea
         <Link
           key={m.index}
           href={`/wiki/${resolved}`}
-          className="border-b border-[var(--node-concept)] text-[var(--node-concept)] hover:opacity-80 transition-opacity"
+          className="wiki-link"
         >
           {linkSlug}
         </Link>
@@ -43,7 +44,11 @@ function resolveWikiLinksInText(text: string, slugMap: Map<string, string>): Rea
         <span
           key={m.index}
           title="Page not yet created"
-          className="border-b border-dashed border-[var(--text-muted)] text-[var(--text-muted)]"
+          style={{
+            color: "rgba(140,160,200,0.55)",
+            borderBottom: "1px dashed rgba(140,160,200,0.40)",
+            padding: "0 1px",
+          }}
         >
           {linkSlug}
         </span>
@@ -79,35 +84,50 @@ function processChildren(
 export default function PageView({ page, allPages }: Props) {
   const slugMap = buildSlugMap(allPages);
   const slugObj = Object.fromEntries(slugMap.entries());
-  const accent = TYPE_COLORS[page.type] ?? "#4f9cf9";
+  const accent = TYPE_COLORS[page.type] ?? "#7dd3fc";
 
   return (
     <article
-      className="mx-auto max-w-3xl px-6 py-10"
-      style={{ animation: "fadeInUp 0.4s ease-out" }}
+      style={{
+        maxWidth: 740,
+        margin: "0 auto",
+        padding: "48px 28px 96px",
+        color: "#dfe6f3",
+        fontFamily: "Inter, system-ui, -apple-system, sans-serif",
+      }}
     >
-      {/* Hero title block with type accent */}
-      <header style={{ marginBottom: 24, position: "relative" }}>
-        {/* Subtle accent bar */}
-        <div
-          style={{
-            position: "absolute",
-            left: -16,
-            top: 8,
-            bottom: 8,
-            width: 2,
-            background: `linear-gradient(180deg, ${accent}99, transparent)`,
-            borderRadius: 2,
-          }}
-        />
+      {/* Hero title block — calm, editorial */}
+      <header style={{ marginBottom: 28 }}>
+        {/* Small type label */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 8,
+          marginBottom: 18,
+        }}>
+          <span style={{
+            width: 5, height: 5, borderRadius: "50%",
+            background: accent,
+            boxShadow: `0 0 6px ${accent}66`,
+          }} />
+          <span style={{
+            fontSize: 10, fontWeight: 600,
+            letterSpacing: "0.16em",
+            color: accent,
+            textTransform: "uppercase" as const,
+            fontFamily: "Inter, system-ui, sans-serif",
+          }}>
+            {page.type === "page" ? "Document" : page.type}
+          </span>
+        </div>
+
         <h1
           style={{
-            color: "#fafafa",
+            color: "#f4f7ff",
             fontWeight: 700,
-            fontSize: 34,
-            lineHeight: 1.15,
+            fontSize: 38,
+            lineHeight: 1.18,
             letterSpacing: "-0.02em",
-            marginBottom: 8,
+            marginBottom: 14,
+            fontFamily: "Inter, system-ui, sans-serif",
           }}
         >
           {page.title}
@@ -115,11 +135,12 @@ export default function PageView({ page, allPages }: Props) {
         {page.excerpt && (
           <p
             style={{
-              color: "#71717a",
-              fontSize: 15,
-              lineHeight: 1.55,
+              color: "rgba(200,215,235,0.75)",
+              fontSize: 16,
+              lineHeight: 1.6,
               fontWeight: 400,
               maxWidth: 640,
+              fontFamily: "Inter, system-ui, sans-serif",
             }}
           >
             {page.excerpt}
@@ -127,12 +148,13 @@ export default function PageView({ page, allPages }: Props) {
         )}
       </header>
 
-      {/* Skip MetadataBar for plain index/untyped pages that have no real metadata */}
+      {/* Metadata bar (hidden for plain index/untyped pages) */}
       {!(page.type === "page" && page.domain[0] === "uncategorized" && !page.lastUpdated) && (
         <MetadataBar page={page} slugMap={slugObj} />
       )}
 
-      <div className="prose prose-invert max-w-none">
+      {/* Markdown body — sober, readable */}
+      <div className="wiki-prose">
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
@@ -150,16 +172,42 @@ export default function PageView({ page, allPages }: Props) {
             },
             a({ href, children }) {
               return (
-                <a href={href} target="_blank" rel="noopener noreferrer">
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ext-link"
+                >
                   {children}
                 </a>
               );
             },
             blockquote({ children }) {
               return (
-                <blockquote className="border-l-2 border-[var(--node-concept)] pl-4 text-[var(--text-muted)] italic my-4">
+                <blockquote style={{
+                  borderLeft: `2px solid ${accent}66`,
+                  paddingLeft: 18,
+                  color: "rgba(200,215,235,0.78)",
+                  fontStyle: "italic",
+                  margin: "22px 0",
+                }}>
                   {children}
                 </blockquote>
+              );
+            },
+            code({ children }) {
+              return (
+                <code style={{
+                  background: "rgba(140,180,255,0.07)",
+                  border: "1px solid rgba(140,180,255,0.12)",
+                  padding: "1px 6px",
+                  borderRadius: 3,
+                  fontSize: "0.88em",
+                  color: "#c4b5fd",
+                  fontFamily: "ui-monospace, 'SF Mono', monospace",
+                }}>
+                  {children}
+                </code>
               );
             },
           }}
@@ -167,6 +215,116 @@ export default function PageView({ page, allPages }: Props) {
           {page.bodyContent}
         </ReactMarkdown>
       </div>
+
+      <style>{`
+        .wiki-link {
+          color: #7dd3fc;
+          text-decoration: none;
+          border-bottom: 1px solid rgba(125,211,252,0.35);
+          padding: 0 1px;
+          transition: color 0.18s, border-color 0.18s;
+        }
+        .wiki-link:hover {
+          color: #a78bfa;
+          border-bottom-color: rgba(167,139,250,0.70);
+        }
+        .ext-link {
+          color: #a78bfa;
+          text-decoration: none;
+          border-bottom: 1px solid rgba(167,139,250,0.35);
+          transition: color 0.18s, border-color 0.18s;
+        }
+        .ext-link:hover {
+          color: #c4b5fd;
+          border-bottom-color: rgba(196,181,253,0.70);
+        }
+        .wiki-prose {
+          color: rgba(220,228,245,0.92);
+          font-size: 16px;
+          line-height: 1.78;
+          font-family: Inter, system-ui, sans-serif;
+        }
+        .wiki-prose h1, .wiki-prose h2, .wiki-prose h3, .wiki-prose h4 {
+          color: #f4f7ff;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          line-height: 1.3;
+          margin-top: 1.8em;
+          margin-bottom: 0.55em;
+        }
+        .wiki-prose h2 {
+          font-size: 22px;
+          padding-bottom: 6px;
+          border-bottom: 1px solid rgba(140,180,255,0.10);
+        }
+        .wiki-prose h3 {
+          font-size: 17px;
+          color: #e6ecf8;
+        }
+        .wiki-prose h4 {
+          font-size: 14px;
+          color: rgba(220,228,245,0.85);
+          text-transform: uppercase;
+          letter-spacing: 0.08em;
+        }
+        .wiki-prose p {
+          margin: 0 0 1.05em;
+        }
+        .wiki-prose strong {
+          color: #f4f7ff;
+          font-weight: 700;
+        }
+        .wiki-prose em {
+          color: rgba(220,228,245,0.92);
+        }
+        .wiki-prose ul, .wiki-prose ol {
+          margin: 0 0 1em;
+          padding-left: 22px;
+        }
+        .wiki-prose li {
+          margin: 0.35em 0;
+        }
+        .wiki-prose li::marker {
+          color: rgba(125,211,252,0.55);
+        }
+        .wiki-prose ol > li::marker {
+          color: rgba(167,139,250,0.70);
+          font-weight: 600;
+        }
+        .wiki-prose hr {
+          border: none;
+          height: 1px;
+          background: rgba(140,180,255,0.12);
+          margin: 36px 0;
+        }
+        .wiki-prose table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 1.2em 0;
+          font-size: 14px;
+        }
+        .wiki-prose th, .wiki-prose td {
+          padding: 9px 14px;
+          text-align: left;
+          border-bottom: 1px solid rgba(140,180,255,0.08);
+        }
+        .wiki-prose th {
+          font-size: 11px;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: rgba(180,200,240,0.78);
+        }
+        .wiki-prose td {
+          color: rgba(220,228,245,0.88);
+        }
+        .wiki-prose img {
+          max-width: 100%;
+          border-radius: 6px;
+          margin: 1em 0;
+          border: 1px solid rgba(140,180,255,0.10);
+        }
+      `}</style>
     </article>
   );
 }

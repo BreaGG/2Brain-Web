@@ -567,10 +567,10 @@ function OrbitRing({ radius, color, speed, axis }: {
 
 // ── Edges ─────────────────────────────────────────────────────────────────
 function Edges({
-  edges, positions, hoveredId, selectedId,
+  edges, positions, hoveredId,
 }: {
   edges: GraphEdge[]; positions: Map<string, THREE.Vector3>;
-  hoveredId: string | null; selectedId: string | null;
+  hoveredId: string | null;
 }) {
   const matRef = useRef<THREE.ShaderMaterial>(null);
 
@@ -603,7 +603,7 @@ function Edges({
       const sid = typeof e.source === "string" ? e.source : e.source.id;
       const tid = typeof e.target === "string" ? e.target : e.target.id;
       if (!positions.has(sid) || !positions.has(tid)) continue;
-      const focused = hoveredId || selectedId;
+      const focused = hoveredId;
       const isHL = !!focused && (sid === focused || tid === focused);
       const dim = !!focused && !isHL;
       const a = isHL ? 0.85 : dim ? 0.06 : 0.32;
@@ -611,7 +611,7 @@ function Edges({
       vi++;
     }
     attr.needsUpdate = true;
-  }, [edges, positions, hoveredId, selectedId, geometry]);
+  }, [edges, positions, hoveredId, geometry]);
 
   useFrame((s) => { if (matRef.current) matRef.current.uniforms.uTime.value = s.clock.elapsedTime; });
   if (lineCount === 0) return null;
@@ -856,12 +856,12 @@ function BigBangFlash() {
 
 // ── Scene ─────────────────────────────────────────────────────────────────
 function Scene({
-  data, activeDomains, onPick, hoveredId, selectedId, setHoveredId,
+  data, activeDomains, onPick, hoveredId, setHoveredId,
   framerTick, framerRequest, framingActiveRef,
   controlsRef, bigBangStartRef,
 }: Props & {
   onPick: (slug: string) => void;
-  hoveredId: string | null; selectedId: string | null;
+  hoveredId: string | null;
   setHoveredId: (id: string | null) => void;
   framerTick: number; framerRequest: FrameTarget | null;
   framingActiveRef: React.RefObject<boolean>;
@@ -883,7 +883,7 @@ function Scene({
     return visibleNodeIds.has(sid) && visibleNodeIds.has(tid);
   }), [data.edges, visibleNodeIds]);
   const neighborIds = useMemo(() => {
-    const focused = hoveredId || selectedId;
+    const focused = hoveredId;
     if (!focused) return new Set<string>();
     const out = new Set<string>([focused]);
     for (const e of visibleEdges) {
@@ -893,7 +893,7 @@ function Scene({
       if (tid === focused) out.add(sid);
     }
     return out;
-  }, [hoveredId, selectedId, visibleEdges]);
+  }, [hoveredId, visibleEdges]);
 
   const items: NodeRender[] = useMemo(() => visibleNodes.map((n) => ({
     node: n,
@@ -903,7 +903,7 @@ function Scene({
     cls: nodeClass(n.id, n.broken),
   })), [visibleNodes, layout]);
   const glowTex = useMemo(() => makeGlowTexture(), []);
-  const focused = hoveredId || selectedId;
+  const focused = hoveredId;
 
   return (
     <>
@@ -920,12 +920,11 @@ function Scene({
 
       {/* Galaxy content — scales from singularity to full size */}
       <BigBangGroup startedAtRef={bigBangStartRef}>
-        <Edges edges={visibleEdges} positions={layout.positions} hoveredId={hoveredId} selectedId={selectedId} />
+        <Edges edges={visibleEdges} positions={layout.positions} hoveredId={hoveredId} />
 
         {items.map((it, idx) => {
           const isHovered  = hoveredId === it.node.id;
-          const isSelected = selectedId === it.node.id;
-          const isHL       = isHovered || isSelected;
+          const isHL       = isHovered;
           const dim        = !!focused && !isHL && !neighborIds.has(it.node.id);
 
           if (it.cls === "core") {
@@ -934,7 +933,7 @@ function Scene({
                 key={it.node.id}
                 position={it.position}
                 hovered={isHovered}
-                selected={isSelected}
+                selected={false}
                 dim={dim}
                 onHover={(h) => setHoveredId(h ? it.node.id : null)}
                 onSelect={() => onPick(it.node.id)}
@@ -945,7 +944,7 @@ function Scene({
           return (
             <StandardNode
               key={it.node.id} item={it} idx={idx} glowTex={glowTex}
-              hovered={isHovered} selected={isSelected} dim={dim}
+              hovered={isHovered} selected={false} dim={dim}
               onHover={setHoveredId} onSelect={() => onPick(it.node.id)}
             />
           );
@@ -989,7 +988,6 @@ function useCountUp(value: number, durationMs = 900): number {
 export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
   const router = useRouter();
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [idle, setIdle] = useState(false);
   const [framerTick, setFramerTick] = useState(0);
   const [framerRequest, setFramerRequest] = useState<FrameTarget | null>(null);
@@ -1069,15 +1067,14 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const selectedNode = selectedId ? data.nodes.find((n) => n.id === selectedId) ?? null : null;
-  const hoveredNode  = hoveredId  ? data.nodes.find((n) => n.id === hoveredId)  ?? null : null;
-  const previewNode = hoveredNode || selectedNode;
+  const hoveredNode = hoveredId ? data.nodes.find((n) => n.id === hoveredId) ?? null : null;
+  const previewNode = hoveredNode;
   const previewPage = previewNode && pages ? pages.find((p) => p.slug === previewNode.id) ?? null : null;
 
+  // Single click → navigate immediately. Hover handles preview card.
   function handlePick(id: string) {
-    if (selectedId === id) router.push(`/wiki/${id}`);
-    else setSelectedId(id);
     bumpInteract();
+    router.push(`/wiki/${id}`);
   }
 
   // Center button → cinematic wide-shot of entire galaxy
@@ -1120,7 +1117,6 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
         camera={{ position: [0, 8, 38], fov: 55, near: 0.1, far: 400 }}
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: false, powerPreference: "high-performance" }}
-        onPointerMissed={() => setSelectedId(null)}
       >
         <Suspense fallback={null}>
           <Scene
@@ -1128,7 +1124,6 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
             activeDomains={activeDomains}
             onPick={handlePick}
             hoveredId={hoveredId}
-            selectedId={selectedId}
             setHoveredId={(id) => { setHoveredId(id); bumpInteract(); }}
             framerTick={framerTick}
             framerRequest={framerRequest}
@@ -1182,7 +1177,7 @@ export default function GalaxyGraph({ data, activeDomains, pages }: Props) {
         nodeCount={data.nodes.length}
         edgeCount={data.edges.length}
         hovered={hoveredNode?.label ?? null}
-        selected={selectedNode?.label ?? null}
+        selected={null}
         idle={idle}
       />
       <CenterButton onCenter={centerGalaxy} />

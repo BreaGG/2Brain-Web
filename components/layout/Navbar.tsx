@@ -55,7 +55,7 @@ export default function Navbar({ view, onViewChange, onSearchOpen }: Props) {
             lineHeight: 1.5, marginTop: 2,
             textShadow: TS,
           }}>
-            GALACTIC OS · v1.0
+            KNOWLEDGE OS · v1.0
           </span>
         </div>
       </Link>

@@ -23,21 +23,28 @@ export default async function WikiPage({ params }: Props) {
   if (!page) notFound();
 
   return (
-    <div className="min-h-full" style={{ backgroundColor: "var(--bg-primary)" }}>
-      {/* Nav bar */}
+    <div
+      style={{
+        minHeight: "100vh",
+        background: "#070B1A",
+        color: "#dfe6f3",
+      }}
+    >
+      {/* Calmer top nav — solid, subtle border, breadcrumb */}
       <header
         style={{
-          height: 48,
-          display: "flex",
-          alignItems: "center",
-          gap: 8,
-          padding: "0 20px",
-          borderBottom: "1px solid #111",
-          background: "#000",
           position: "sticky",
           top: 0,
           zIndex: 10,
-          backdropFilter: "blur(8px)",
+          height: 50,
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "0 28px",
+          background: "rgba(7,11,26,0.92)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          borderBottom: "1px solid rgba(140,180,255,0.08)",
         }}
       >
         <Link
@@ -45,27 +52,47 @@ export default async function WikiPage({ params }: Props) {
           style={{
             display: "flex",
             alignItems: "center",
-            gap: 7,
+            gap: 9,
             textDecoration: "none",
-            color: "#fff",
-            fontWeight: 600,
-            fontSize: 13,
             flexShrink: 0,
+            opacity: 0.92,
+            transition: "opacity 0.18s",
           }}
         >
-          <span style={{ color: "#4f9cf9" }}>⬡</span>
-          2Brain
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+            <polygon points="12,2 21,7 21,17 12,22 3,17 3,7" stroke="#67e8f9" strokeWidth="1.1" fill="none" strokeOpacity="0.85" />
+            <circle cx="12" cy="12" r="1.6" fill="#e0e7ff" />
+          </svg>
+          <span style={{
+            color: "#dfe6f3", fontWeight: 600, fontSize: 13,
+            letterSpacing: "0.04em",
+            fontFamily: "Inter, system-ui, sans-serif",
+          }}>
+            2Brain
+          </span>
         </Link>
-        <span style={{ color: "#27272a", fontSize: 14 }}>/</span>
-        <span style={{ color: "#52525b", fontSize: 13 }}>{page.domain[0]}</span>
-        <span style={{ color: "#27272a", fontSize: 14 }}>/</span>
+
+        <span style={{ color: "rgba(140,160,200,0.40)", fontSize: 13 }}>/</span>
+
+        <span style={{
+          color: "rgba(180,200,240,0.65)", fontSize: 12,
+          fontFamily: "Inter, system-ui, sans-serif",
+          textTransform: "capitalize" as const,
+        }}>
+          {page.domain[0] ?? "uncategorized"}
+        </span>
+
+        <span style={{ color: "rgba(140,160,200,0.40)", fontSize: 13 }}>/</span>
+
         <span
           style={{
-            color: "#a1a1aa",
+            color: "#dfe6f3",
             fontSize: 13,
+            fontWeight: 500,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
+            fontFamily: "Inter, system-ui, sans-serif",
           }}
         >
           {page.title}
