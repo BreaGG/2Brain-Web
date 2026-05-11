@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ParsedPage } from "@/lib/types";
 import MetadataBar from "./MetadataBar";
+import NodeMap, { type NodeRef } from "./NodeMap";
 import { buildSlugMap } from "@/lib/parser";
 import Link from "next/link";
 
@@ -86,7 +87,48 @@ export default function PageView({ page, allPages }: Props) {
   const slugObj = Object.fromEntries(slugMap.entries());
   const accent = TYPE_COLORS[page.type] ?? "#7dd3fc";
 
+  // ── Connection map data (server-computed) ─────────────────────────────
+  const allBySlug = new Map(allPages.map((p) => [p.slug, p]));
+  const shortSlug = page.slug.split("/").pop()!;
+
+  // Outbound: pages this page links to (deduped)
+  const seenOut = new Set<string>();
+  const outbound: NodeRef[] = [];
+  for (const link of page.links) {
+    const resolved = slugMap.get(link.slug) ?? slugMap.get(`${link.folder ?? ""}/${link.slug}`);
+    if (!resolved || resolved === page.slug || seenOut.has(resolved)) continue;
+    const target = allBySlug.get(resolved);
+    if (!target) continue;
+    seenOut.add(resolved);
+    outbound.push({ slug: target.slug, title: target.title, type: target.type });
+  }
+
+  // Inbound: pages that link to this page
+  const inbound: NodeRef[] = [];
+  for (const other of allPages) {
+    if (other.slug === page.slug) continue;
+    const hasLink = other.links.some((l) => {
+      if (l.slug === shortSlug) return true;
+      if (l.slug === page.slug) return true;
+      if (l.folder && `${l.folder}/${l.slug}` === page.slug) return true;
+      return false;
+    });
+    if (hasLink) inbound.push({ slug: other.slug, title: other.title, type: other.type });
+  }
+
+  // Domain section parent (e.g. wiki/research/index for research domain pages)
+  const domain = page.domain[0] && page.domain[0] !== "uncategorized" ? page.domain[0] : null;
+  const sectionSlug = domain && slugMap.has(`${domain}/index`) ? `${domain}/index` : null;
+
   return (
+    <>
+    <NodeMap
+      current={{ slug: page.slug, title: page.title, type: page.type }}
+      outbound={outbound}
+      inbound={inbound}
+      domain={domain}
+      sectionSlug={sectionSlug}
+    />
     <article
       style={{
         maxWidth: 740,
@@ -326,5 +368,6 @@ export default function PageView({ page, allPages }: Props) {
         }
       `}</style>
     </article>
+    </>
   );
 }
