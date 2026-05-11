@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Fuse from "fuse.js";
 import type { ParsedPage } from "@/lib/types";
+import { HUD, CornerTicks, ScanLine, DOMAIN_COLORS, TYPE_COLORS } from "@/components/hud/primitives";
 
 interface Props {
   pages: ParsedPage[];
@@ -24,25 +25,11 @@ const FUSE_OPTIONS = {
   minMatchCharLength: 2,
 };
 
-const TYPE_DOT: Record<string, string> = {
-  concept:          "#4f9cf9",
-  person:           "#4ade80",
-  "source-summary": "#facc15",
-  synthesis:        "#c084fc",
-};
-
 const TYPE_LABEL: Record<string, string> = {
   concept:          "CONCEPT",
   person:           "PERSON",
   "source-summary": "SOURCE",
   synthesis:        "SYNTHESIS",
-};
-
-const DOMAIN_COLORS: Record<string, string> = {
-  personal: "#fb7185",
-  research: "#60a5fa",
-  reading:  "#fbbf24",
-  business: "#34d399",
 };
 
 export default function SearchModal({ pages, open, onClose }: Props) {
@@ -87,53 +74,80 @@ export default function SearchModal({ pages, open, onClose }: Props) {
         position: "fixed", inset: 0, zIndex: 50,
         display: "flex", alignItems: "flex-start", justifyContent: "center",
         paddingTop: "14vh",
-        background: "rgba(0,0,0,0.82)",
-        backdropFilter: "blur(8px)",
+        background: "rgba(2,4,12,0.62)",
+        backdropFilter: "blur(10px)",
+        WebkitBackdropFilter: "blur(10px)",
+        animation: `searchFade 0.18s ${HUD.easeOut}`,
       }}
       onClick={onClose}
     >
       <div
         style={{
-          width: "100%", maxWidth: 580,
-          borderRadius: 6, overflow: "hidden",
-          border: "1px solid rgba(255,255,255,0.07)",
-          background: "rgba(3,5,12,0.97)",
-          boxShadow: "0 0 0 1px rgba(79,156,249,0.08), 0 40px 80px rgba(0,0,0,0.97)",
           position: "relative",
+          width: "100%", maxWidth: 620,
+          borderRadius: 10, overflow: "hidden",
+          border: HUD.border,
+          background: HUD.bgPanelStrong,
+          backdropFilter: HUD.blurStrong,
+          WebkitBackdropFilter: HUD.blurStrong,
+          boxShadow: "0 30px 80px rgba(0,0,0,0.75), 0 0 0 1px rgba(120,160,255,0.06), 0 0 50px rgba(167,139,250,0.15), inset 0 1px 0 rgba(255,255,255,0.06)",
+          animation: `searchPop 0.26s ${HUD.easeOut}`,
         }}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
       >
-        {/* Top accent bar */}
-        <div style={{
-          position: "absolute", top: 0, left: 0, right: 0, height: 1,
-          background: "linear-gradient(90deg, transparent 0%, rgba(79,156,249,0.6) 50%, transparent 100%)",
-        }} />
+        <ScanLine />
+        <ScanLine position="bottom" />
+        <CornerTicks size={8} inset={6} />
 
-        {/* Corner brackets */}
-        <div style={{ position: "absolute", top: -1, left: -1, width: 12, height: 12, borderTop: "1px solid rgba(79,156,249,0.5)", borderLeft: "1px solid rgba(79,156,249,0.5)" }} />
-        <div style={{ position: "absolute", top: -1, right: -1, width: 12, height: 12, borderTop: "1px solid rgba(79,156,249,0.5)", borderRight: "1px solid rgba(79,156,249,0.5)" }} />
+        {/* Title strip */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "11px 18px 8px",
+          fontFamily: HUD.font,
+        }}>
+          <span style={{
+            width: 4, height: 4, borderRadius: 1,
+            background: HUD.violet,
+            boxShadow: `0 0 8px ${HUD.violet}aa`,
+          }} />
+          <span style={{
+            fontSize: 9, fontWeight: 700, letterSpacing: "0.24em",
+            color: HUD.textPrimary, textTransform: "uppercase" as const,
+          }}>
+            GALAXY · SEARCH PROBE
+          </span>
+          <div style={{ flex: 1, height: 1, background: "rgba(140,180,255,0.08)" }} />
+          <span style={{
+            fontSize: 8, color: HUD.textMuted,
+            letterSpacing: "0.18em",
+          }}>
+            {pages.length} NODES INDEXED
+          </span>
+        </div>
 
         {/* Input row */}
         <div style={{
           display: "flex", alignItems: "center", gap: 12,
-          padding: "14px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          padding: "12px 18px 14px",
+          borderBottom: "1px solid rgba(140,180,255,0.08)",
         }}>
-          <svg width="13" height="13" fill="none" stroke="#3f3f46" viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+          <svg width="14" height="14" fill="none" stroke={HUD.cyan} viewBox="0 0 24 24" style={{ flexShrink: 0, filter: `drop-shadow(0 0 4px ${HUD.cyan}88)` }}>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
           </svg>
           <input
             ref={inputRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search knowledge base…"
+            placeholder="Scan the knowledge galaxy…"
             style={{
               flex: 1, background: "transparent",
               border: "none", outline: "none",
-              color: "#e8e8e8", fontSize: 14,
+              color: HUD.textPrimary, fontSize: 15,
               letterSpacing: "0.01em",
+              fontFamily: HUD.fontUi,
+              caretColor: HUD.cyan,
             }}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") { e.preventDefault(); setCursor((c) => Math.min(c + 1, results.length - 1)); }
@@ -142,61 +156,84 @@ export default function SearchModal({ pages, open, onClose }: Props) {
             }}
           />
           <kbd style={{
-            border: "1px solid rgba(255,255,255,0.08)", borderRadius: 3,
-            padding: "2px 6px", fontSize: 10, color: "#3f3f46",
-            fontFamily: "monospace", background: "rgba(255,255,255,0.02)",
+            border: "1px solid rgba(140,180,255,0.18)", borderRadius: 4,
+            padding: "2px 7px", fontSize: 9.5, color: HUD.textMuted,
+            fontFamily: HUD.font, background: "rgba(7,11,26,0.55)",
+            letterSpacing: "0.1em",
           }}>ESC</kbd>
         </div>
 
         {/* Results */}
         {results.length > 0 ? (
-          <ul style={{ padding: "5px 0", maxHeight: 380, overflowY: "auto" }}>
+          <ul style={{ padding: "6px 0", maxHeight: 420, overflowY: "auto" }}>
             {results.map((r, i) => {
-              const dot   = TYPE_DOT[r.item.type]   ?? "#71717a";
+              const dot   = TYPE_COLORS[r.item.type] ?? "#94a3b8";
               const label = TYPE_LABEL[r.item.type] ?? r.item.type.toUpperCase();
               const active = i === cursor;
               return (
                 <li key={r.item.slug}>
                   <button
                     style={{
+                      position: "relative",
                       width: "100%", textAlign: "left",
-                      padding: "10px 16px",
-                      display: "flex", alignItems: "center", gap: 12,
-                      background: active ? "rgba(79,156,249,0.05)" : "transparent",
+                      padding: "11px 18px",
+                      display: "flex", alignItems: "center", gap: 14,
+                      background: active ? `${dot}0c` : "transparent",
                       border: "none", cursor: "pointer",
-                      borderLeft: `2px solid ${active ? dot : "transparent"}`,
-                      transition: "all 0.1s",
+                      transition: `all 0.15s ${HUD.easeOut}`,
+                      fontFamily: HUD.fontUi,
                     }}
                     onClick={() => go(i)}
                     onMouseEnter={() => setCursor(i)}
                   >
+                    {/* Left accent bar */}
                     <span style={{
-                      width: 7, height: 7, borderRadius: "50%",
+                      position: "absolute", left: 0, top: "20%", bottom: "20%",
+                      width: 2,
+                      background: active ? dot : "transparent",
+                      boxShadow: active ? `0 0 8px ${dot}` : "none",
+                      transition: `all 0.15s ${HUD.easeOut}`,
+                    }} />
+                    <span style={{
+                      width: 8, height: 8, borderRadius: "50%",
                       background: dot, flexShrink: 0,
-                      boxShadow: active ? `0 0 8px ${dot}cc` : "none",
+                      boxShadow: active ? `0 0 10px ${dot}, 0 0 3px ${dot}` : `0 0 5px ${dot}88`,
                       transition: "box-shadow 0.15s",
                     }} />
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <p style={{
-                        color: active ? "#fff" : "#a1a1aa",
-                        fontSize: 13, fontWeight: 500,
+                        color: active ? HUD.textPrimary : HUD.textSecondary,
+                        fontSize: 13.5, fontWeight: 500,
                         overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                        letterSpacing: "0.005em",
+                        transition: "color 0.15s",
                       }}>
                         {r.item.title}
                       </p>
                       {r.item.excerpt && (
                         <p style={{
-                          color: "#2d2d2d", fontSize: 11, marginTop: 2,
+                          color: HUD.textMuted, fontSize: 11.5, marginTop: 2,
                           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          fontFamily: HUD.fontUi,
                         }}>
                           {r.item.excerpt}
                         </p>
                       )}
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 2, flexShrink: 0 }}>
-                      <span style={{ fontSize: 9, color: dot, fontFamily: "monospace", letterSpacing: "0.1em" }}>{label}</span>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+                      <span style={{
+                        fontSize: 8.5, color: dot,
+                        fontFamily: HUD.font, letterSpacing: "0.18em",
+                        padding: "1.5px 6px",
+                        border: `1px solid ${dot}33`,
+                        borderRadius: 3,
+                      }}>{label}</span>
                       {r.item.domain[0] && (
-                        <span style={{ fontSize: 9, color: DOMAIN_COLORS[r.item.domain[0]] ?? "#52525b", fontFamily: "monospace", letterSpacing: "0.08em" }}>
+                        <span style={{
+                          fontSize: 8, color: DOMAIN_COLORS[r.item.domain[0]] ?? HUD.textMuted,
+                          fontFamily: HUD.font, letterSpacing: "0.18em",
+                          textTransform: "uppercase" as const,
+                        }}>
                           {r.item.domain[0]}
                         </span>
                       )}
@@ -207,34 +244,57 @@ export default function SearchModal({ pages, open, onClose }: Props) {
             })}
           </ul>
         ) : query.length >= 2 ? (
-          <p style={{ padding: "32px 0", textAlign: "center", color: "#3f3f46", fontSize: 12, fontFamily: "monospace", letterSpacing: "0.04em" }}>
-            NO RESULTS — &ldquo;{query}&rdquo;
-          </p>
+          <div style={{
+            padding: "44px 0 38px", textAlign: "center",
+            color: HUD.textMuted, fontSize: 11.5,
+            fontFamily: HUD.font, letterSpacing: "0.14em",
+          }}>
+            ◌ NO SIGNAL · &ldquo;{query}&rdquo;
+          </div>
         ) : (
-          <p style={{ padding: "32px 0", textAlign: "center", color: "#1f1f1f", fontSize: 11, fontFamily: "monospace", letterSpacing: "0.06em" }}>
-            {pages.length} NODES INDEXED
-          </p>
+          <div style={{
+            padding: "44px 0 38px", textAlign: "center",
+            color: HUD.textDim, fontSize: 10.5,
+            fontFamily: HUD.font, letterSpacing: "0.2em",
+          }}>
+            ◇ TYPE TO SCAN · MIN 2 CHARS
+          </div>
         )}
 
         {/* Footer hint */}
         <div style={{
-          display: "flex", alignItems: "center", gap: 14,
-          padding: "8px 16px",
-          borderTop: "1px solid rgba(255,255,255,0.04)",
-          background: "rgba(0,0,0,0.4)",
+          display: "flex", alignItems: "center", gap: 16,
+          padding: "10px 18px",
+          borderTop: "1px solid rgba(140,180,255,0.08)",
+          background: "rgba(2,4,12,0.4)",
         }}>
           {[["↑↓", "navigate"], ["↵", "open"], ["esc", "close"]].map(([key, hint]) => (
-            <span key={key} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span key={key} style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <kbd style={{
-                border: "1px solid rgba(255,255,255,0.08)", borderRadius: 3,
-                padding: "1px 5px", fontSize: 9, color: "#52525b",
-                fontFamily: "monospace", background: "rgba(255,255,255,0.02)",
+                border: "1px solid rgba(140,180,255,0.16)", borderRadius: 3,
+                padding: "1px 6px", fontSize: 9, color: HUD.textSecondary,
+                fontFamily: HUD.font, background: "rgba(7,11,26,0.55)",
+                letterSpacing: "0.06em",
               }}>{key}</kbd>
-              <span style={{ fontSize: 9, color: "#2a2a2a", letterSpacing: "0.05em" }}>{hint}</span>
+              <span style={{
+                fontSize: 9, color: HUD.textMuted, letterSpacing: "0.1em",
+                fontFamily: HUD.font,
+              }}>{hint}</span>
             </span>
           ))}
         </div>
       </div>
+
+      <style>{`
+        @keyframes searchFade {
+          from { opacity: 0; }
+          to   { opacity: 1; }
+        }
+        @keyframes searchPop {
+          from { opacity: 0; transform: translateY(-8px) scale(0.985); }
+          to   { opacity: 1; transform: translateY(0)    scale(1); }
+        }
+      `}</style>
     </div>
   );
 }

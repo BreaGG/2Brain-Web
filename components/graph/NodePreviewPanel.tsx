@@ -2,24 +2,18 @@
 
 import { useEffect, useState } from "react";
 import type { GraphNode, ParsedPage } from "@/lib/types";
+import { HUD, CornerTicks, ScanLine, DOMAIN_COLORS, TYPE_COLORS } from "@/components/hud/primitives";
 
 const MOBILE_BP = 768;
 
-const TYPE_META: Record<string, { dot: string; label: string }> = {
-  concept:          { dot: "#4f9cf9", label: "CONCEPT"   },
-  person:           { dot: "#4ade80", label: "PERSON"    },
-  "source-summary": { dot: "#facc15", label: "SOURCE"    },
-  synthesis:        { dot: "#c084fc", label: "SYNTHESIS" },
-  ghost:            { dot: "#52525b", label: "GHOST"     },
-  meta:             { dot: "#71717a", label: "META"      },
-  page:             { dot: "#71717a", label: "PAGE"      },
-};
-
-const DOMAIN_COLORS: Record<string, string> = {
-  personal: "#fb7185",
-  research: "#60a5fa",
-  reading:  "#fbbf24",
-  business: "#34d399",
+const TYPE_LABEL: Record<string, string> = {
+  concept:          "CONCEPT",
+  person:           "PERSON",
+  "source-summary": "SOURCE",
+  synthesis:        "SYNTHESIS",
+  ghost:            "GHOST",
+  meta:             "META",
+  page:             "PAGE",
 };
 
 interface Props {
@@ -28,7 +22,6 @@ interface Props {
 }
 
 export default function NodePreviewPanel({ node, page }: Props) {
-  /* Keep last node during fade-out for smooth transition */
   const [shownNode, setShownNode] = useState<GraphNode | null>(null);
   const [shownPage, setShownPage] = useState<ParsedPage | null>(null);
   const [isMobile, setIsMobile] = useState(false);
@@ -39,44 +32,32 @@ export default function NodePreviewPanel({ node, page }: Props) {
     return () => window.removeEventListener("resize", check);
   }, []);
   useEffect(() => {
-    if (node) {
-      setShownNode(node);
-      setShownPage(page);
-    }
+    if (node) { setShownNode(node); setShownPage(page); }
   }, [node, page]);
 
   const visible = !!node;
   const display = shownNode;
   const displayPage = shownPage;
-  const meta = display ? (TYPE_META[display.type] ?? { dot: "#71717a", label: display.type.toUpperCase() }) : TYPE_META.page;
-  const c = meta.dot;
+  const c = display ? (TYPE_COLORS[display.type] ?? HUD.textMuted) : HUD.textMuted;
+  const label = display ? (TYPE_LABEL[display.type] ?? display.type.toUpperCase()) : "PAGE";
 
-  /* Mobile: bottom sheet anchored, Desktop: top-left panel */
   const mobileStyle: React.CSSProperties = {
     position: "absolute",
-    bottom: 12,
-    left: 12,
-    right: 12,
-    top: "auto",
-    width: "auto",
-    maxWidth: "none",
-    zIndex: 20,
-    pointerEvents: "none",
+    bottom: 12, left: 12, right: 12,
+    zIndex: 20, pointerEvents: "none",
     opacity: visible ? 1 : 0,
     transform: visible ? "translateY(0)" : "translateY(14px)",
-    transition: "opacity 0.18s ease, transform 0.18s ease",
+    transition: `opacity 0.22s ${HUD.easeOut}, transform 0.22s ${HUD.easeOut}`,
   };
   const desktopStyle: React.CSSProperties = {
     position: "absolute",
-    top: 100,
-    left: 24,
+    top: 200, left: 28,
     width: 360,
     maxWidth: "calc(50vw - 48px)",
-    zIndex: 20,
-    pointerEvents: "none",
+    zIndex: 20, pointerEvents: "none",
     opacity: visible ? 1 : 0,
     transform: visible ? "translateX(0)" : "translateX(-12px)",
-    transition: "opacity 0.18s ease, transform 0.18s ease",
+    transition: `opacity 0.22s ${HUD.easeOut}, transform 0.22s ${HUD.easeOut}`,
   };
 
   return (
@@ -84,144 +65,117 @@ export default function NodePreviewPanel({ node, page }: Props) {
       <div
         style={{
           position: "relative",
-          background: "rgba(2,4,10,0.92)",
-          border: `1px solid ${c}26`,
-          borderRadius: 6,
-          padding: "16px 18px 14px",
-          backdropFilter: "blur(24px)",
-          WebkitBackdropFilter: "blur(24px)",
-          boxShadow: `0 0 0 1px ${c}10, 0 28px 64px rgba(0,0,0,0.92), 0 0 40px ${c}10`,
+          background: HUD.bgPanel,
+          border: `1px solid ${c}30`,
+          borderRadius: 8,
+          padding: "14px 16px 14px",
+          backdropFilter: HUD.blur,
+          WebkitBackdropFilter: HUD.blur,
+          boxShadow: `${HUD.shadow}, 0 0 30px ${c}14`,
+          overflow: "hidden",
         }}
       >
-        {/* Corner brackets */}
-        <div style={{ position: "absolute", top: -1, left: -1, width: 11, height: 11, borderTop: `1px solid ${c}80`, borderLeft: `1px solid ${c}80` }} />
-        <div style={{ position: "absolute", top: -1, right: -1, width: 11, height: 11, borderTop: `1px solid ${c}40`, borderRight: `1px solid ${c}40` }} />
-        <div style={{ position: "absolute", bottom: -1, left: -1, width: 11, height: 11, borderBottom: `1px solid ${c}40`, borderLeft: `1px solid ${c}40` }} />
-        <div style={{ position: "absolute", bottom: -1, right: -1, width: 11, height: 11, borderBottom: `1px solid ${c}80`, borderRight: `1px solid ${c}80` }} />
-
-        {/* Top accent line */}
-        <div
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 12,
-            right: 12,
-            height: 1,
-            background: `linear-gradient(90deg, transparent, ${c}80, transparent)`,
-            pointerEvents: "none",
-          }}
-        />
+        <ScanLine />
+        <ScanLine position="bottom" />
+        <CornerTicks color={`${c}88`} />
 
         {display && (
           <>
-            {/* Type + domains */}
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <span
-                style={{
-                  width: 7, height: 7, borderRadius: "50%",
-                  background: c, flexShrink: 0,
-                  boxShadow: `0 0 8px ${c}cc, 0 0 14px ${c}66`,
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 9, fontWeight: 700, letterSpacing: "0.18em",
-                  color: c, fontFamily: "monospace",
-                }}
-              >
-                {meta.label}
+            {/* Header strip */}
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 11 }}>
+              <span style={{
+                width: 6, height: 6, borderRadius: "50%",
+                background: c,
+                boxShadow: `0 0 10px ${c}, 0 0 4px ${c}`,
+              }} />
+              <span style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: "0.2em",
+                color: c, fontFamily: HUD.font,
+              }}>
+                {label}
               </span>
               <span style={{ flex: 1 }} />
-              {display.domain.slice(0, 2).map((d) => (
-                <span
-                  key={d}
-                  style={{
-                    fontSize: 9,
-                    color: DOMAIN_COLORS[d] ?? "#52525b",
-                    letterSpacing: "0.10em",
-                    fontFamily: "monospace",
-                    textTransform: "uppercase",
-                    padding: "2px 6px",
-                    border: `1px solid ${DOMAIN_COLORS[d] ?? "#52525b"}33`,
-                    borderRadius: 3,
-                  }}
-                >
-                  {d}
-                </span>
-              ))}
+              {display.domain.slice(0, 2).map((d) => {
+                const dc = DOMAIN_COLORS[d] ?? HUD.textMuted;
+                return (
+                  <span
+                    key={d}
+                    style={{
+                      fontSize: 8, color: dc,
+                      letterSpacing: "0.18em",
+                      fontFamily: HUD.font,
+                      textTransform: "uppercase" as const,
+                      padding: "2px 7px",
+                      border: `1px solid ${dc}33`,
+                      borderRadius: 3,
+                      boxShadow: `0 0 8px ${dc}22`,
+                    }}
+                  >
+                    {d}
+                  </span>
+                );
+              })}
             </div>
 
             {/* Title */}
-            <h2
-              style={{
-                color: "#f4f4f5",
-                fontWeight: 600,
-                fontSize: 18,
-                lineHeight: 1.30,
-                marginBottom: 12,
-                letterSpacing: "-0.005em",
-              }}
-            >
+            <h2 style={{
+              color: HUD.textPrimary,
+              fontWeight: 600, fontSize: 18,
+              lineHeight: 1.30, marginBottom: 10,
+              letterSpacing: "-0.005em",
+              fontFamily: HUD.fontUi,
+            }}>
               {display.label}
             </h2>
 
             {/* Excerpt */}
             {displayPage?.excerpt && (
-              <p
-                style={{
-                  color: "#a1a1aa",
-                  fontSize: 12.5,
-                  lineHeight: 1.55,
-                  marginBottom: 14,
-                  display: "-webkit-box",
-                  WebkitLineClamp: 4,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
+              <p style={{
+                color: HUD.textSecondary,
+                fontSize: 12.5, lineHeight: 1.55,
+                marginBottom: 14,
+                fontFamily: HUD.fontUi,
+                display: "-webkit-box",
+                WebkitLineClamp: 4,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden",
+              }}>
                 {displayPage.excerpt}
               </p>
             )}
 
             {/* Separator */}
-            <div
-              style={{
-                height: 1,
-                background: `linear-gradient(90deg, ${c}1a, transparent 80%)`,
-                marginBottom: 12,
-              }}
-            />
+            <div style={{
+              height: 1,
+              background: `linear-gradient(90deg, ${c}26, transparent 80%)`,
+              marginBottom: 12,
+            }} />
 
-            {/* Stat row */}
-            <div style={{ display: "flex", gap: 16, marginBottom: displayPage?.sources && displayPage.sources.length > 0 ? 12 : 4 }}>
-              <Stat label="LINKS"   value={String(display.degree)} />
-              {displayPage?.lastUpdated && <Stat label="UPDATED" value={displayPage.lastUpdated} />}
+            {/* Stats */}
+            <div style={{ display: "flex", gap: 18, marginBottom: displayPage?.sources && displayPage.sources.length > 0 ? 12 : 4 }}>
+              <Stat label="LINKS"   value={String(display.degree)} accent={c} />
+              {displayPage?.lastUpdated && <Stat label="UPDATED" value={displayPage.lastUpdated} accent={c} />}
               {displayPage?.sources && displayPage.sources.length > 0 && (
-                <Stat label="SOURCES" value={String(displayPage.sources.length)} />
+                <Stat label="SOURCES" value={String(displayPage.sources.length)} accent={c} />
               )}
             </div>
 
-            {/* Sources preview */}
+            {/* Sources */}
             {displayPage?.sources && displayPage.sources.length > 0 && (
-              <div
-                style={{
-                  fontSize: 10,
-                  color: "#52525b",
-                  fontFamily: "monospace",
-                  letterSpacing: "0.04em",
-                  lineHeight: 1.5,
-                  display: "flex",
-                  flexWrap: "wrap",
-                  gap: 4,
-                }}
-              >
+              <div style={{
+                fontSize: 9.5, color: HUD.textMuted,
+                fontFamily: HUD.font, letterSpacing: "0.05em",
+                lineHeight: 1.5,
+                display: "flex", flexWrap: "wrap", gap: 4,
+              }}>
                 {displayPage.sources.slice(0, 3).map((s) => (
                   <span
                     key={s}
                     style={{
-                      padding: "2px 6px",
-                      border: "1px solid #1f1f23",
+                      padding: "2px 7px",
+                      border: "1px solid rgba(140,180,255,0.12)",
                       borderRadius: 3,
+                      background: "rgba(140,180,255,0.03)",
                       maxWidth: 220,
                       overflow: "hidden",
                       textOverflow: "ellipsis",
@@ -232,50 +186,35 @@ export default function NodePreviewPanel({ node, page }: Props) {
                   </span>
                 ))}
                 {displayPage.sources.length > 3 && (
-                  <span style={{ padding: "2px 6px", color: "#3f3f46" }}>
+                  <span style={{ padding: "2px 7px", color: HUD.textDim }}>
                     +{displayPage.sources.length - 3}
                   </span>
                 )}
               </div>
             )}
 
-            {/* CTA + ID */}
-            <div
-              style={{
-                marginTop: 14,
-                paddingTop: 10,
-                borderTop: "1px solid rgba(255,255,255,0.04)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <span
-                style={{
-                  fontSize: 9,
-                  color: "#3f3f46",
-                  fontFamily: "monospace",
-                  letterSpacing: "0.05em",
-                  maxWidth: 200,
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {display.broken ? "○ GHOST NODE" : display.id}
+            {/* Footer */}
+            <div style={{
+              marginTop: 14, paddingTop: 10,
+              borderTop: "1px solid rgba(140,180,255,0.06)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <span style={{
+                fontSize: 8.5, color: HUD.textDim,
+                fontFamily: HUD.font, letterSpacing: "0.1em",
+                maxWidth: 200,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {display.broken ? "◌ GHOST NODE" : `▸ ${display.id}`}
               </span>
               {!display.broken && (
-                <span
-                  style={{
-                    fontSize: 9,
-                    fontFamily: "monospace",
-                    letterSpacing: "0.10em",
-                    color: c,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                  }}
-                >
+                <span style={{
+                  fontSize: 8.5, fontFamily: HUD.font,
+                  letterSpacing: "0.18em", fontWeight: 700,
+                  color: c,
+                  display: "flex", alignItems: "center", gap: 4,
+                  textShadow: `0 0 10px ${c}88`,
+                }}>
                   CLICK · OPEN <span style={{ fontSize: 11 }}>→</span>
                 </span>
               )}
@@ -287,28 +226,19 @@ export default function NodePreviewPanel({ node, page }: Props) {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-      <span
-        style={{
-          fontSize: 8,
-          fontFamily: "monospace",
-          letterSpacing: "0.14em",
-          color: "#3f3f46",
-        }}
-      >
-        {label}
-      </span>
-      <span
-        style={{
-          fontSize: 12,
-          color: "#d4d4d8",
-          fontFamily: "monospace",
-        }}
-      >
-        {value}
-      </span>
+    <div>
+      <p style={{
+        fontSize: 7.5, color: HUD.textMuted,
+        letterSpacing: "0.2em", fontFamily: HUD.font,
+        fontWeight: 700, marginBottom: 3,
+      }}>{label}</p>
+      <p style={{
+        fontSize: 13, color: accent,
+        fontFamily: HUD.font, fontWeight: 600,
+        textShadow: `0 0 10px ${accent}66`,
+      }}>{value}</p>
     </div>
   );
 }

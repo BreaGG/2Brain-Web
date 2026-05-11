@@ -18,8 +18,9 @@ const ZOOM_SENS       = 1.6;       // multiplier for two-hand zoom delta
 const SCROLL_SENS     = 2.6;       // pixel scroll multiplier for vertical pinch-drag
 const FIST_HOLD_MS    = 1400;      // fist held to trigger back-navigation
 
-function findGraphSvg(): SVGSVGElement | null {
-  return document.querySelector<SVGSVGElement>("svg[data-knowledge-graph]");
+function findGraphSvg(): Element | null {
+  // Matches either the legacy SVG graph or the new 3D Galaxy canvas wrapper
+  return document.querySelector<Element>("[data-knowledge-graph]");
 }
 
 export default function HandTracking({ active, onClose }: Props) {
@@ -222,7 +223,7 @@ export default function HandTracking({ active, onClose }: Props) {
       // Pinch start — decide drag (graph) vs scroll (page)
       pinchingRef.current = true;
       const target = elementUnder(cx, cy);
-      const onGraph = !!target?.closest("svg[data-knowledge-graph]");
+      const onGraph = !!target?.closest("[data-knowledge-graph]");
       const mode: "drag" | "scroll" = onGraph ? "drag" : "scroll";
       pinchStartRef.current = { t: performance.now(), x: cx, y: cy, el: target, mode };
       draggedElRef.current = target;

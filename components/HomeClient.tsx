@@ -10,7 +10,8 @@ import Navbar from "@/components/layout/Navbar";
 import StatsPanel from "@/components/graph/StatsPanel";
 import { useHandTracking } from "@/components/HandTrackingContext";
 
-const KnowledgeGraph = dynamic(() => import("@/components/graph/KnowledgeGraph"), { ssr: false });
+const KnowledgeGraph = dynamic(() => import("@/components/graph/GalaxyGraph"),   { ssr: false });
+const Heatmap        = dynamic(() => import("@/components/heat/Heatmap"),         { ssr: false });
 
 interface Props {
   pages: ParsedPage[];
@@ -28,7 +29,7 @@ const LEGEND = [
 const MOBILE_BREAKPOINT = 768;
 
 export default function HomeClient({ pages, graphData, allDomains }: Props) {
-  const [view, setView]               = useState<"graph" | "list">("graph");
+  const [view, setView]               = useState<"graph" | "list" | "heat">("graph");
   const [activeDomains, setActiveDomains] = useState<Set<string>>(new Set());
   const [searchOpen, setSearchOpen]   = useState(false);
   const [isMobile, setIsMobile]       = useState(false);
@@ -59,61 +60,84 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
   /* ── MOBILE LAYOUT ── */
   if (isMobile) {
     return (
-      <div style={{ height: "100dvh", width: "100%", background: "#00000f", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {/* Mobile top bar */}
+      <div style={{ height: "100dvh", width: "100%", background: "#050816", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        {/* Mobile top bar — transparent, text only */}
         <div style={{
-          height: 48, flexShrink: 0,
-          display: "flex", alignItems: "center", gap: 12,
-          padding: "0 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background: "rgba(0,0,10,0.85)",
-          backdropFilter: "blur(12px)",
-          WebkitBackdropFilter: "blur(12px)",
+          height: 46, flexShrink: 0,
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "0 14px",
+          background: "transparent",
           zIndex: 20,
         }}>
-          {/* Logo mark */}
-          <svg width="16" height="18" viewBox="0 0 18 20" fill="none" style={{ flexShrink: 0 }}>
-            <polygon points="9,1 17,5.5 17,14.5 9,19 1,14.5 1,5.5"
-              stroke="#4f9cf9" strokeWidth="1" fill="none" strokeOpacity="0.8" />
-            <circle cx="9" cy="10" r="1.5" fill="#4f9cf9" opacity="0.6" />
+          {/* Logo */}
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" style={{ flexShrink: 0, filter: "drop-shadow(0 0 6px rgba(103,232,249,0.8)) drop-shadow(0 1px 2px rgba(0,0,0,0.9))" }}>
+            <polygon points="12,2 21,7 21,17 12,22 3,17 3,7" stroke="#67e8f9" strokeWidth="1.1" fill="none" strokeOpacity="0.95" />
+            <circle cx="12" cy="12" r="1.8" fill="#e0e7ff" />
           </svg>
-          <span style={{ color: "#e8e8e8", fontWeight: 700, fontSize: 12, letterSpacing: "0.1em", flex: 1 }}>
+          <span style={{
+            color: "#e8eeff", fontWeight: 700, fontSize: 12,
+            letterSpacing: "0.18em", flex: 1,
+            fontFamily: "ui-monospace, 'SF Mono', monospace",
+            textShadow: "0 1px 4px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.85)",
+          }}>
             2BRAIN
           </span>
-          {/* View toggle */}
-          <div style={{
-            display: "flex", alignItems: "center",
-            border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 4, overflow: "hidden",
-          }}>
-            {(["graph", "list"] as const).map((v, i) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                style={{
-                  padding: "5px 14px", fontSize: 10, cursor: "pointer", fontWeight: 600,
-                  border: "none",
-                  borderRight: i === 0 ? "1px solid rgba(255,255,255,0.06)" : "none",
-                  background: view === v ? "rgba(79,156,249,0.12)" : "transparent",
-                  color: view === v ? "#4f9cf9" : "#52525b",
-                  letterSpacing: "0.08em", textTransform: "uppercase" as const,
-                  fontFamily: "inherit",
-                }}
-              >
-                {v === "graph" ? "⬡" : "≡"} {v}
-              </button>
-            ))}
+          {/* View toggle — transparent, color/underline only */}
+          <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+            {(["graph", "list", "heat"] as const).map((v) => {
+              const active = view === v;
+              const activeColor = v === "heat" ? "#a78bfa" : v === "list" ? "#7dd3fc" : "#67e8f9";
+              return (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  style={{
+                    position: "relative",
+                    padding: "5px 8px 7px", fontSize: 9.5,
+                    cursor: "pointer", fontWeight: 700,
+                    border: "none",
+                    background: "transparent",
+                    color: active ? activeColor : "rgba(200,215,255,0.62)",
+                    letterSpacing: "0.18em", textTransform: "uppercase" as const,
+                    fontFamily: "ui-monospace, 'SF Mono', monospace",
+                    transition: "color 0.22s",
+                    textShadow: active
+                      ? `0 0 12px ${activeColor}cc, 0 1px 4px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.85)`
+                      : "0 1px 4px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85)",
+                  }}
+                >
+                  <span style={{ opacity: active ? 1 : 0.85 }}>
+                    {v === "graph" ? "⬡" : v === "list" ? "≡" : "◉"}
+                  </span>{" "}
+                  {v}
+                  {active && (
+                    <span style={{
+                      position: "absolute",
+                      bottom: 0, left: 6, right: 6, height: 1,
+                      background: `linear-gradient(90deg, transparent, ${activeColor}, transparent)`,
+                      boxShadow: `0 0 6px ${activeColor}cc`,
+                    }} />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         {/* Content area */}
-        {view === "graph" ? (
+        {view === "graph" && (
           <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
             <KnowledgeGraph data={graphData} activeDomains={activeDomains} pages={pages} />
           </div>
-        ) : (
+        )}
+        {view === "list" && (
           <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
             <PageTable pages={pages} linkDegrees={linkDegrees} activeDomains={activeDomains} />
+          </div>
+        )}
+        {view === "heat" && (
+          <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+            <Heatmap pages={pages} linkDegrees={linkDegrees} activeDomains={activeDomains} />
           </div>
         )}
       </div>
@@ -137,6 +161,13 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
         </div>
       )}
 
+      {/* Heat view — 3D terrain, fills viewport below nav */}
+      {view === "heat" && (
+        <div style={{ position: "absolute", inset: 0, top: 96, zIndex: 5, overflow: "hidden" }}>
+          <Heatmap pages={pages} linkDegrees={linkDegrees} activeDomains={activeDomains} />
+        </div>
+      )}
+
       {/* StatsPanel overlay — hidden in hand-tracking mode */}
       {view === "graph" && !handActive && (
         <StatsPanel pages={pages} graphData={graphData} activeDomains={activeDomains} onToggleDomain={toggleDomain} />
@@ -148,12 +179,10 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
           <Navbar view={view} onViewChange={setView} onSearchOpen={() => setSearchOpen(true)} />
         </div>
 
-        {/* Control bar */}
+        {/* Control bar — HUD strip */}
         <div style={{
           display: "flex", alignItems: "center", gap: 12,
-          padding: "7px 20px",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-          background: "transparent",
+          padding: "12px 26px 0",
           position: "relative",
           pointerEvents: "auto",
         }}>
@@ -165,68 +194,81 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
         />
         <div style={{
           marginLeft: "auto",
-          display: "flex", alignItems: "center", gap: 8,
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "6px 14px",
+          background: "rgba(7,11,26,0.4)",
+          backdropFilter: "blur(22px) saturate(140%)",
+          WebkitBackdropFilter: "blur(22px) saturate(140%)",
+          border: "1px solid rgba(140,180,255,0.14)",
+          borderRadius: 8,
+          boxShadow: "0 4px 14px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04)",
+          fontFamily: "ui-monospace, 'SF Mono', monospace",
+          position: "relative", overflow: "hidden",
         }}>
-          <span style={{ fontSize: 9, color: "#a1a1aa", fontFamily: "monospace", letterSpacing: "0.1em", textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>
-            {visibleCount} nodes
+          <span style={{
+            position: "absolute", top: 0, left: 10, right: 10, height: 1,
+            background: "linear-gradient(90deg, transparent, rgba(140,180,255,0.55), transparent)",
+            pointerEvents: "none",
+          }} />
+          <span style={{ fontSize: 8, color: "rgba(140,160,200,0.55)", letterSpacing: "0.22em", fontWeight: 700 }}>
+            SIG
           </span>
-          <span style={{ fontSize: 9, color: "#52525b", fontFamily: "monospace" }}>·</span>
-          <span style={{ fontSize: 9, color: "#a1a1aa", fontFamily: "monospace", letterSpacing: "0.1em", textShadow: "0 1px 2px rgba(0,0,0,0.8)" }}>
-            {graphData.edges.length} edges
+          <span style={{ fontSize: 11, color: "#67e8f9", fontWeight: 700, textShadow: "0 0 10px rgba(103,232,249,0.55)" }}>
+            {String(visibleCount).padStart(3, "0")}
+          </span>
+          <span style={{ fontSize: 9, color: "rgba(140,160,200,0.4)" }}>·</span>
+          <span style={{ fontSize: 11, color: "#a78bfa", fontWeight: 700, textShadow: "0 0 10px rgba(167,139,250,0.55)" }}>
+            {String(graphData.edges.length).padStart(3, "0")}
+          </span>
+          <span style={{ fontSize: 8, color: "rgba(140,160,200,0.55)", letterSpacing: "0.18em" }}>
+            LNK
           </span>
         </div>
         </div>
       </div>
 
-      {/* Footer overlay — HUD status bar */}
+      {/* Footer — transparent, only text + dots with strong shadow for contrast */}
       {view === "graph" && (
         <footer style={{
-          display: "flex", alignItems: "center",
-          gap: 0,
-          padding: "0 20px",
-          height: 36,
-          borderTop: "1px solid rgba(255,255,255,0.05)",
-          background: "transparent",
           position: "absolute",
-          left: 0, right: 0, bottom: 0,
+          left: 26, right: 26, bottom: 14,
+          height: 32,
+          display: "flex", alignItems: "center",
+          background: "transparent",
           zIndex: 20,
           pointerEvents: "none",
         }}>
-          {/* Top gradient */}
-          <div style={{
-            position: "absolute", top: 0, left: 0, right: 0, height: 1,
-            background: "linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.04) 50%, transparent 100%)",
-            pointerEvents: "none",
-          }} />
-
           {/* Legend */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
             {LEGEND.map(({ label, color }) => (
               <span key={label} style={{
                 display: "flex", alignItems: "center", gap: 6,
-                fontSize: 9, color: "#9ca3af",
-                letterSpacing: "0.08em", textTransform: "uppercase" as const,
-                fontFamily: "monospace",
-                textShadow: "0 1px 2px rgba(0,0,0,0.85)",
+                fontSize: 9, color: "#e8eeff",
+                letterSpacing: "0.18em", textTransform: "uppercase" as const,
+                fontFamily: "ui-monospace, 'SF Mono', monospace",
+                fontWeight: 700,
+                textShadow: "0 1px 4px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.85), 0 0 32px rgba(0,0,0,0.55)",
               }}>
                 <span style={{
                   width: 6, height: 6, borderRadius: "50%",
-                  background: color, display: "inline-block", flexShrink: 0,
-                  boxShadow: `0 0 5px ${color}70`,
+                  background: color, flexShrink: 0,
+                  boxShadow: `0 0 8px ${color}cc, 0 0 2px ${color}, 0 0 16px rgba(0,0,0,0.85)`,
                 }} />
                 {label}
               </span>
             ))}
-            <span style={{ width: 1, height: 12, background: "rgba(255,255,255,0.06)", flexShrink: 0, marginLeft: 2 }} />
             <span style={{
               display: "flex", alignItems: "center", gap: 6,
-              fontSize: 9, color: "#3f3f46",
-              letterSpacing: "0.08em", textTransform: "uppercase" as const,
-              fontFamily: "monospace",
+              fontSize: 9, color: "rgba(200,215,255,0.62)",
+              letterSpacing: "0.18em", textTransform: "uppercase" as const,
+              fontFamily: "ui-monospace, 'SF Mono', monospace",
+              fontWeight: 700,
+              textShadow: "0 1px 4px rgba(0,0,0,0.95), 0 0 16px rgba(0,0,0,0.85)",
             }}>
               <span style={{
-                width: 14, borderTop: "1px dashed rgba(255,255,255,0.15)",
-                display: "inline-block", flexShrink: 0,
+                width: 14, borderTop: "1px dashed rgba(200,215,255,0.55)",
+                flexShrink: 0,
+                filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.85))",
               }} />
               ghost
             </span>
@@ -234,22 +276,32 @@ export default function HomeClient({ pages, graphData, allDomains }: Props) {
 
           <div style={{ flex: 1 }} />
 
-          {/* Hints */}
+          {/* Control hints */}
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {[["scroll", "zoom"], ["drag", "rotate"], ["click", "open"]].map(([action, hint]) => (
+            {[["SCROLL", "ZOOM"], ["DRAG", "ORBIT"], ["CLICK", "OPEN"]].map(([action, hint]) => (
               <span key={action} style={{
-                display: "flex", alignItems: "center", gap: 5,
-                fontSize: 10, letterSpacing: "0.04em", fontFamily: "monospace",
+                display: "flex", alignItems: "center", gap: 7,
+                fontSize: 9.5, letterSpacing: "0.06em",
+                fontFamily: "ui-monospace, 'SF Mono', monospace",
               }}>
                 <kbd style={{
-                  border: "1px solid rgba(255,255,255,0.20)", borderRadius: 3,
-                  padding: "2px 6px", fontSize: 10, color: "#d4d4d8",
-                  fontFamily: "monospace", background: "rgba(0,0,0,0.45)",
-                  backdropFilter: "blur(6px)",
-                  lineHeight: 1.4,
-                  textShadow: "0 1px 2px rgba(0,0,0,0.85)",
+                  border: "1px solid rgba(200,215,255,0.40)",
+                  borderRadius: 3,
+                  padding: "2px 7px", fontSize: 9,
+                  color: "#e8eeff",
+                  fontFamily: "ui-monospace, 'SF Mono', monospace",
+                  background: "transparent",
+                  lineHeight: 1.4, fontWeight: 700, letterSpacing: "0.14em",
+                  textShadow: "0 1px 4px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85)",
+                  boxShadow: "0 1px 4px rgba(0,0,0,0.6)",
                 }}>{action}</kbd>
-                <span style={{ color: "#a1a1aa", fontSize: 10, textShadow: "0 1px 2px rgba(0,0,0,0.85)" }}>→ {hint}</span>
+                <span style={{
+                  color: "rgba(200,215,255,0.78)", fontSize: 8.5,
+                  letterSpacing: "0.18em", fontWeight: 700,
+                  textShadow: "0 1px 4px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85)",
+                }}>
+                  → {hint}
+                </span>
               </span>
             ))}
           </div>
