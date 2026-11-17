@@ -155,7 +155,7 @@ export default function Learn({ accent, onClose }: PaneProps) {
           <p>Drag to turn the brain, scroll to zoom and right-drag to move it. Point at a dot to see its note; click to open it.</p>
           <p style={{ marginTop: 8 }}>Double-click anywhere on the brain to clear what is lit. Esc closes what opened last, one at a time.</p>
           <p style={{ marginTop: 8 }}>
-            <b>⌘K</b> searches notes and runs commands, <b>/</b> finds in the brain, <b>V</b> opens View.
+            <b>⌘K</b> searches notes and runs commands, <b>/</b> finds in the brain, <b>V</b> opens View and <b>B</b> focuses the brain, setting the body aside.
           </p>
         </Sect>
 

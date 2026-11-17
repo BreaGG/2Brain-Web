@@ -115,8 +115,9 @@ export default function BrainCanvas(p: BrainCanvasProps) {
       notes: st.notes,
       record: st.record,
       ghosts: st.ghosts,
+      focusBrain: st.focusBrain,
     });
-  }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, s, anat]);
+  }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, st.focusBrain, s, anat]);
 
   useEffect(() => {
     s.current?.setLabels(p.labels, st.labelSize);

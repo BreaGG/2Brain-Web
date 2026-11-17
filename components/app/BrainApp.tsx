@@ -203,6 +203,8 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
         document.getElementById("stage-find")?.focus();
       } else if (e.key === "v" && !e.metaKey && !e.ctrlKey) {
         setVizOpen((v) => !v);
+      } else if (e.key === "b" && !e.metaKey && !e.ctrlKey) {
+        setSettings((st) => ({ ...st, focusBrain: !st.focusBrain }));
       }
     };
     window.addEventListener("keydown", onKey);

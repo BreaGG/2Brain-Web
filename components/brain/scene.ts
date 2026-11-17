@@ -27,6 +27,7 @@ export interface SceneView {
   notes: boolean;
   record: boolean;
   ghosts: boolean;
+  focusBrain: boolean;
 }
 
 export interface SceneLabel {
@@ -242,7 +243,9 @@ export class BrainScene {
     notes: true,
     record: true,
     ghosts: false,
+    focusBrain: false,
   };
+  private bodyCur = 1;
   private formCur = 0;
   private splitCur = 0;
   private revealCur = 0;
@@ -262,6 +265,7 @@ export class BrainScene {
   private down: { x: number; y: number; t: number } | null = null;
   private userTurning = false;
   private fitDist = 18;
+  private brainDist = 5;
   private reduced = false;
 
   constructor(host: HTMLElement, labelHost: HTMLElement, cb: SceneCallbacks) {
@@ -537,8 +541,21 @@ export class BrainScene {
   }
 
   setView(v: SceneView) {
+    const wasBrain = this.brainMode();
     this.view = v;
     this.applyVisibility();
+    if (wasBrain !== this.brainMode()) this.home();
+  }
+
+  /** Focus brain: the camera frames the brain alone and the body fades out. */
+  private brainMode() {
+    return this.view.focusBrain && this.view.form < 0.5;
+  }
+  private homeY() {
+    return this.brainMode() ? BRAIN_C.y - 0.04 : FRAME_CY;
+  }
+  private homeDist() {
+    return this.brainMode() ? this.brainDist : this.fitDist;
   }
 
   setLabels(labels: SceneLabel[], size: "auto" | "small" | "large") {
@@ -569,12 +586,12 @@ export class BrainScene {
   /** Smoothly bring a note to the centre of the view. */
   focusNote(i: number) {
     if (!this.anat) return;
-    this.flyTo = { note: i, dist: Math.max(4.6, this.fitDist * 0.3) };
+    this.flyTo = { note: i, dist: this.brainMode() ? this.brainDist * 0.8 : Math.max(4.6, this.fitDist * 0.3) };
   }
 
-  /** Smoothly return to the whole figure. */
+  /** Smoothly return to the whole figure (or the brain, in focus brain). */
   home() {
-    this.flyTo = { note: null, dist: this.fitDist };
+    this.flyTo = { note: null, dist: this.homeDist() };
   }
   private flyTo: { note: number | null; dist: number } | null = null;
 
@@ -589,8 +606,8 @@ export class BrainScene {
 
   resetCamera() {
     this.flyTo = null;
-    this.camera.position.set(0, FRAME_CY, this.fitDist);
-    this.controls.target.set(0, FRAME_CY, 0);
+    this.camera.position.set(0, this.homeY(), this.homeDist());
+    this.controls.target.set(0, this.homeY(), 0);
     this.root.rotation.set(0, 0, 0);
   }
 
@@ -621,7 +638,7 @@ export class BrainScene {
     const v = this.view;
     if (this.notes) this.notes.visible = v.notes;
     if (this.rec) this.rec.visible = v.record || v.outline;
-    if (this.fibres) this.fibres.visible = v.record;
+    if (this.fibres) this.fibres.visible = v.record && !v.focusBrain;
     if (this.lines) this.lines.visible = v.links && v.notes;
     if (this.ghostPts) this.ghostPts.visible = v.ghosts && v.notes;
     if (this.ghostLines) this.ghostLines.visible = v.ghosts && v.notes && v.links;
@@ -768,11 +785,13 @@ export class BrainScene {
     const t = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
     const distH = (FRAME.top - FRAME.bottom) / 2 / t;
     const distW = FRAME.width / 2 / t / this.camera.aspect;
-    const prev = this.fitDist;
+    const prev = this.homeDist();
     this.fitDist = Math.max(distH, distW);
+    // the brain alone: about 1.35 wide and 1.6 tall, with a margin for labels
+    this.brainDist = Math.max(2.05 / 2 / t, 2.0 / 2 / t / this.camera.aspect);
     // keep the viewing direction and relative zoom, rescaled to the new fit
     const off = this.camera.position.clone().sub(this.controls.target);
-    off.multiplyScalar(this.fitDist / prev);
+    off.multiplyScalar(this.homeDist() / prev);
     this.camera.position.copy(this.controls.target).add(off);
     this.camera.updateProjectionMatrix();
     const px = this.renderer.getPixelRatio();
@@ -810,13 +829,14 @@ export class BrainScene {
     // brain matter rides on "Brain outline", the body on "Record"
     this.recMat.uniforms.uSplit.value = this.splitCur;
     this.recMat.uniforms.uMatterK.value = this.view.outline ? this.view.outlineOpacity / 100 : 0;
-    this.recMat.uniforms.uBodyK.value = this.view.record ? 1 : 0;
-    this.fibreMat.uniforms.uOpacity.value = 0.2 * (1 - this.formCur) * (1 - this.hasLitCur * 0.3);
-    if (this.fibres) this.fibres.visible = this.view.record && this.formCur < 0.98;
+    this.bodyCur = ease(this.bodyCur, this.view.record && !this.view.focusBrain ? 1 : 0, dt, 3);
+    this.recMat.uniforms.uBodyK.value = this.bodyCur;
+    this.fibreMat.uniforms.uOpacity.value = 0.2 * (1 - this.formCur) * (1 - this.hasLitCur * 0.3) * this.bodyCur;
+    if (this.fibres) this.fibres.visible = this.bodyCur > 0.01 && this.formCur < 0.98;
     this.linesMat.uniforms.uOpacity.value = (0.1 + 0.08 * this.formCur) * (1 + this.hasLitCur * 1.4);
 
     // camera target follows the form
-    const ty = FRAME_CY;
+    const ty = this.homeY();
     if (this.flyTo) {
       const f = this.flyTo;
       const ft =
