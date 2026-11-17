@@ -30,6 +30,18 @@ GITHUB_TOKEN=…   # token with read access
 
 Without these variables the app shows a built-in sample wiki, so it can run locally with no setup.
 
+### Writing new notes from the web
+
+**Add → Write a new note** saves a note straight to the wiki repository: the Markdown file and the line that lists it in its folder's `index.md` go in as **one commit** (a new folder also gets an index, linked from `wiki/index.md`). The note appears in the brain at once and opens.
+
+Writing is off until you set one more variable:
+
+```bash
+WIKI_WRITE_KEY=…   # any long secret; you type it once in the form and it is remembered on that device
+```
+
+`GITHUB_TOKEN` then needs **write access to the repository's contents** (a fine-grained token with *Contents: Read and write* on that one repository). The key is checked on the server; the token never reaches the browser.
+
 A note is read like this:
 
 ```markdown

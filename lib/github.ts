@@ -1,7 +1,7 @@
 const OWNER = process.env.GITHUB_OWNER!;
 const REPO = process.env.GITHUB_REPO!;
 const TOKEN = process.env.GITHUB_TOKEN!;
-const API = "https://api.github.com";
+const API = process.env.GITHUB_API_URL || "https://api.github.com";
 
 const headers = {
   Authorization: `Bearer ${TOKEN}`,

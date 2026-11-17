@@ -29,11 +29,13 @@ interface Props {
   initialSlug?: string;
   repo: { owner: string; repo: string } | null;
   usingSample: boolean;
+  /** Writing new notes to the wiki repository is turned on (WIKI_WRITE_KEY is set). */
+  writable?: boolean;
 }
 
 const PANE_IDS = new Set<PaneId>(["navigator", "numbers", "timeline", "you", "lab", "review", "files", "learn", "add"]);
 
-export default function BrainApp({ pages, initialSlug, repo, usingSample }: Props) {
+export default function BrainApp({ pages, initialSlug, repo, usingSample, writable = false }: Props) {
   const [demo, setDemoState] = useState(false);
   const demoPages = useMemo(() => (demo ? sampleWikiFiles().map((f) => parsePage(f.path, f.content)) : null), [demo]);
   const model = useMemo(() => buildModel(demoPages ?? pages), [pages, demoPages]);
@@ -335,6 +337,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
     gestures,
     setGestures,
     replaceSettings,
+    writable: writable && !demo,
     startTour: () => setTour(true),
     demo,
     setDemo: (v: boolean) => {
