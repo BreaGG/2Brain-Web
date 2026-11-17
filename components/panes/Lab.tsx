@@ -44,7 +44,7 @@ export default function Lab({ accent, onClose }: PaneProps) {
         <p className="lede">Experiments on your brain: build tables from any two things, steer it with your hands, and see what holds the links together.</p>
 
         <Sect label="Table builder" accent={accent}>
-          <p>Choose rows and columns — folder, domain, type, year or how linked a note is — and count your notes across them. Any cell lights its notes in the brain.</p>
+          <p>Turn the record into charts made of its own points. Put month, weekday, folder, type or how linked a note is on the axes, pick a form — grid, ribbon, wheel, spheres, shells, clusters or folders — or ask one of the answers: stream, waves, chord, clock, calendar, returns, lifelines and balance. The points fly from one form to the next.</p>
           <div style={{ marginTop: 12 }}>
             <SwitchRow label="Show the table builder" on={settings.tableBuilder} onChange={(v) => set("tableBuilder", v)} />
           </div>

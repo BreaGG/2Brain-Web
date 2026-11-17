@@ -54,11 +54,31 @@ export interface Anatomy {
   fibres: Uint32Array; // pairs of record indices along the nerves
 }
 
-export interface Grouped {
-  groupBy: GroupBy;
+export type LabelKind = "axis" | "axisL" | "title" | "box" | "count";
+
+export interface LayoutLabel {
+  text: string;
+  pos: [number, number, number];
+  kind: LabelKind;
+  group?: number;
+}
+
+/** Where every note and every record point goes when Form is at Layout. */
+export interface Layout {
+  key: string;
   noteLayout: Float32Array;
   recLayout: Float32Array;
+  labels: LayoutLabel[];
+  /** The box the camera frames, or null for the figure's own frame. */
+  frame: { cx: number; cy: number; w: number; h: number } | null;
+  /** Flat charts stop turning and face the camera. */
+  flat: boolean;
+  /** Guide lines: pairs of points, each segment coloured by a group (-1 for white). */
+  scaffold: { pos: Float32Array; group: Int32Array } | null;
 }
+
+/** @deprecated use Layout */
+export type Grouped = Layout;
 
 /* ── loading ──────────────────────────────────────────────────────────────── */
 
@@ -112,7 +132,7 @@ export function decodeAtlas(buf: ArrayBuffer): Atlas {
 
 /* ── building ─────────────────────────────────────────────────────────────── */
 
-function rng(seed: number) {
+export function rng(seed: number) {
   return () => {
     seed |= 0;
     seed = (seed + 0x6d2b79f5) | 0;
@@ -420,7 +440,7 @@ function farthestPoints(P: Float32Array, idx: number[], k: number, start: number
 
 /* ── layout form: one cluster per group, filling the same frame ─────────── */
 
-export function buildGrouped(model: Model, groupBy: GroupBy, anat: Anatomy): Grouped {
+export function buildGrouped(model: Model, groupBy: GroupBy, anat: Anatomy): Layout {
   const r = rng(99 + model.notes.length);
   const g = model.groups[groupBy];
   const G = Math.max(1, g.list.length);
@@ -469,7 +489,7 @@ export function buildGrouped(model: Model, groupBy: GroupBy, anat: Anatomy): Gro
     recLayout[k * 3 + 2] = Math.sin(a) * s * rr;
   }
 
-  return { groupBy, noteLayout, recLayout };
+  return { key: `groups:${groupBy}`, noteLayout, recLayout, labels: [], frame: null, flat: false, scaffold: null };
 }
 
 function fibDir(i: number, n: number): [number, number, number] {

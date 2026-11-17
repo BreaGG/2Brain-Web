@@ -7,6 +7,7 @@ import { buildModel } from "@/lib/brain";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "@/lib/settings";
 import { THEMES, groupRgb, rgbCss } from "@/lib/palettes";
 import type { SceneLabel } from "@/components/brain/scene";
+import type { FormSpec } from "@/components/brain/forms";
 import { AppCtx, NAV, type AppApi, type Focus, type PaneId } from "./context";
 import Rail from "./Rail";
 import StageOverlay from "./StageOverlay";
@@ -42,7 +43,16 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
   useEffect(() => {
     if (loaded.current) saveSettings(settings);
   }, [settings]);
-  const set = useCallback(<K extends keyof Settings>(k: K, v: Settings[K]) => setSettings((s) => ({ ...s, [k]: v })), []);
+  const set = useCallback(
+    <K extends keyof Settings>(k: K, v: Settings[K]) =>
+      setSettings((s) => {
+        const next = { ...s, [k]: v };
+        // the table builder is drawn at Layout: turning it on slides Form across, off slides it back
+        if (k === "tableBuilder") next.form = v ? 1 : 0;
+        return next;
+      }),
+    [],
+  );
   const resetSettings = useCallback(() => setSettings(DEFAULT_SETTINGS), []);
 
   /* ── grouping + colours ───────────────────────────────────────────────── */
@@ -54,6 +64,25 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
   );
   const colors = useMemo(() => rgb.map(rgbCss), [rgb]);
   const colorOf = useCallback((i: number) => colors[grouping.of[i]] ?? "#fff", [colors, grouping]);
+  const sceneRgb = useMemo(
+    () => (settings.tableBuilder && settings.tbMono ? rgb.map(() => [0.92, 0.92, 0.92] as [number, number, number]) : rgb),
+    [rgb, settings.tableBuilder, settings.tbMono],
+  );
+
+  /* ── table builder ────────────────────────────────────────────────────── */
+  const table = useMemo<FormSpec | null>(
+    () =>
+      settings.tableBuilder
+        ? { across: settings.tbAcross, down: settings.tbDown, form: settings.tbForm, answer: settings.tbAnswer, counts: settings.tbCounts, grouping }
+        : null,
+    [settings.tableBuilder, settings.tbAcross, settings.tbDown, settings.tbForm, settings.tbAnswer, settings.tbCounts, grouping],
+  );
+  const sizeK = useMemo(() => {
+    if (!settings.tableBuilder || settings.tbSize === "same") return null;
+    const v = model.notes.map((x) => (settings.tbSize === "words" ? x.words : x.in.length + x.out.length));
+    const max = Math.max(1, ...v);
+    return Float32Array.from(v, (x) => 0.45 + 1.9 * Math.sqrt(x / max));
+  }, [settings.tableBuilder, settings.tbSize, model]);
 
   /* ── panes + note ─────────────────────────────────────────────────────── */
   const initialIdx = initialSlug != null ? (model.bySlug.get(initialSlug) ?? null) : null;
@@ -240,8 +269,15 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
     if (settings.hideUnsorted) {
       for (let i = 0; i < N; i++) if (grouping.list[grouping.of[i]]?.unsorted) h[i] = 1;
     }
+    if (settings.tableBuilder && settings.tbFilter !== "all") {
+      const [kind, key] = settings.tbFilter.split(":");
+      for (let i = 0; i < N; i++) {
+        const n = model.notes[i];
+        if ((kind === "type" && n.type !== key) || (kind === "folder" && n.folder !== key) || (kind === "domain" && n.domain !== key)) h[i] = 1;
+      }
+    }
     return h;
-  }, [settings.hideUnsorted, grouping, N]);
+  }, [settings.hideUnsorted, settings.tableBuilder, settings.tbFilter, grouping, N, model]);
 
   const labels = useMemo<SceneLabel[]>(() => {
     if (settings.labels === "none") return [];
@@ -330,7 +366,9 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
             groupBy={settings.groupBy}
             groupOf={grouping.of}
             groupCount={G}
-            groupRgb={rgb}
+            groupRgb={sceneRgb}
+            table={table}
+            sizeK={sizeK}
             noteLit={noteLit}
             recLit={recLit}
             hidden={hidden}

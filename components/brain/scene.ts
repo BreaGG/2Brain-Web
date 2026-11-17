@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
-import type { Anatomy, Grouped } from "./anatomy";
+import type { Anatomy, Layout, LabelKind } from "./anatomy";
 import { KIND_FACE, KIND_MATTER, KIND_NERVE, KIND_SPINE, KIND_STEM, FRAME, FRAME_CY, BRAIN_C } from "./anatomy";
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -35,10 +35,16 @@ export interface SceneLabel {
   note?: number;
   group?: number;
   strong?: boolean;
+  /** A fixed place in the layout (axis labels, titles). Shown only at Layout. */
+  pos?: [number, number, number];
+  kind?: LabelKind;
 }
+
+const NOTE_SIZE = 3.3;
 
 const POINT_VS = /* glsl */ `
   attribute vec3 aLayout;
+  attribute vec3 aFrom;
   attribute vec3 aColor;
   attribute float aSize;
   attribute float aOrder;
@@ -50,6 +56,7 @@ const POINT_VS = /* glsl */ `
   uniform float uMatterK;
   uniform float uBodyK;
   uniform float uForm;
+  uniform float uMorph;
   uniform float uReveal;
   uniform float uPx;
   uniform float uScale;
@@ -59,7 +66,9 @@ const POINT_VS = /* glsl */ `
   varying vec3 vColor;
   varying float vAlpha;
   void main() {
-    vec3 p = mix(position + vec3(aSplitX * uSplit, 0.0, 0.0), aLayout, uForm);
+    float m = smoothstep(0.0, 1.0, clamp(uMorph * 1.35 - aOrder * 0.35, 0.0, 1.0));
+    vec3 lay = mix(aFrom, aLayout, m);
+    vec3 p = mix(position + vec3(aSplitX * uSplit, 0.0, 0.0), lay, uForm);
     p.x += sin(uTime * 0.6 + aOrder * 61.0) * 0.006;
     p.y += cos(uTime * 0.5 + aOrder * 47.0) * 0.006;
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
@@ -146,6 +155,7 @@ function pointsMaterial() {
       fragmentShader: POINT_FS,
       uniforms: {
         uForm: { value: 0 },
+        uMorph: { value: 1 },
         uReveal: { value: 0 },
         uPx: { value: 1 },
         uScale: { value: 1 },
@@ -181,7 +191,17 @@ export class BrainScene {
   private disposed = false;
 
   private anat: Anatomy | null = null;
-  private grouped: Grouped | null = null;
+  private layout: Layout | null = null;
+  private recFrom: Float32Array = new Float32Array(0);
+  private noteFrom: Float32Array = new Float32Array(0);
+  private morphCur = 1;
+  private groupRgbArr: [number, number, number][] = [];
+  private scaffold?: THREE.LineSegments;
+  private scaffoldGeo?: THREE.BufferGeometry;
+  private scaffoldMat = additive(
+    new THREE.ShaderMaterial({ vertexShader: LINE_VS, fragmentShader: LINE_FS, uniforms: { uOpacity: { value: 0 } } }),
+  );
+  private frameDist = 18;
   private groupOf: Int32Array = new Int32Array(0);
   private groupCount = 0;
 
@@ -329,14 +349,16 @@ export class BrainScene {
     const g = new THREE.BufferGeometry();
     g.setAttribute("position", new THREE.BufferAttribute(this.notePosCur, 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute("aLayout", g.getAttribute("position"));
+    g.setAttribute("aFrom", g.getAttribute("position"));
     g.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
     const sizes = new Float32Array(n);
     const orders = new Float32Array(n);
     for (let i = 0; i < n; i++) {
-      sizes[i] = 3.3;
+      sizes[i] = NOTE_SIZE;
       orders[i] = 0.002 + (i / Math.max(1, n)) * 0.04;
     }
     g.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
+    this.noteSizeBase = sizes.slice();
     g.setAttribute("aOrder", new THREE.BufferAttribute(orders, 1));
     g.setAttribute("aLit", new THREE.BufferAttribute(new Float32Array(n), 1));
     g.setAttribute("aVis", new THREE.BufferAttribute(this.noteVis, 1));
@@ -355,6 +377,9 @@ export class BrainScene {
     const rg = new THREE.BufferGeometry();
     rg.setAttribute("position", new THREE.BufferAttribute(anat.recPos, 3));
     rg.setAttribute("aLayout", new THREE.BufferAttribute(new Float32Array(anat.recPos), 3));
+    rg.setAttribute("aFrom", new THREE.BufferAttribute(new Float32Array(anat.recPos), 3));
+    this.layout = null;
+    this.morphCur = 1;
     rg.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(P * 3), 3));
     const rs = new Float32Array(P);
     for (let k = 0; k < P; k++) {
@@ -366,6 +391,7 @@ export class BrainScene {
     rg.setAttribute("aSplitX", new THREE.BufferAttribute(anat.recSplit, 1));
     rg.setAttribute("aMatter", new THREE.BufferAttribute(matterFlag, 1));
     rg.setAttribute("aSize", new THREE.BufferAttribute(rs, 1));
+    this.recSizeBase = rs.slice();
     rg.setAttribute("aOrder", new THREE.BufferAttribute(anat.recOrder, 1));
     rg.setAttribute("aLit", new THREE.BufferAttribute(new Float32Array(P), 1));
     rg.setAttribute("aVis", new THREE.BufferAttribute(new Float32Array(P).fill(1), 1));
@@ -417,6 +443,7 @@ export class BrainScene {
     const gg = new THREE.BufferGeometry();
     gg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(Gh * 3), 3).setUsage(THREE.DynamicDrawUsage));
     gg.setAttribute("aLayout", gg.getAttribute("position"));
+    gg.setAttribute("aFrom", gg.getAttribute("position"));
     gg.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(Gh * 3).fill(0.55), 3));
     gg.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(Gh).fill(2.1), 1));
     gg.setAttribute("aOrder", new THREE.BufferAttribute(new Float32Array(Gh).fill(0.05), 1));
@@ -444,17 +471,99 @@ export class BrainScene {
     this.applyVisibility();
   }
 
-  setGrouped(grouped: Grouped, groupOf: Int32Array, groupCount: number) {
-    this.grouped = grouped;
+  /** Where the points go at Layout. A change of layout flies the points from where they are now. */
+  setLayout(layout: Layout, groupOf: Int32Array, groupCount: number) {
+    const anat = this.anat;
     this.groupOf = groupOf;
     this.groupCount = groupCount;
     this.groupCentroid = new Float32Array(groupCount * 4);
-    if (this.recGeo) {
-      const a = this.recGeo.getAttribute("aLayout") as THREE.BufferAttribute;
-      (a.array as Float32Array).set(grouped.recLayout);
-      a.needsUpdate = true;
+    if (!anat || !this.recGeo) {
+      this.layout = layout;
+      return;
     }
+    const prev = this.layout;
+    const toA = this.recGeo.getAttribute("aLayout") as THREE.BufferAttribute;
+    const fromA = this.recGeo.getAttribute("aFrom") as THREE.BufferAttribute;
+    const to = toA.array as Float32Array;
+    const from = fromA.array as Float32Array;
+    const animate = !!prev && prev.key !== layout.key && this.formCur > 0.05;
+    if (animate) {
+      // freeze where the points are now (per-point stagger matches the shader closely enough)
+      const m = this.morphCur;
+      for (let i = 0; i < to.length; i++) from[i] = from[i] + (to[i] - from[i]) * m;
+      const nf = this.noteFrom;
+      const nt = prev.noteLayout;
+      const cur = new Float32Array(nt.length);
+      for (let i = 0; i < nt.length; i++) cur[i] = (nf[i] ?? nt[i]) + (nt[i] - (nf[i] ?? nt[i])) * m;
+      this.noteFrom = cur;
+      this.morphCur = 0;
+    } else {
+      from.set(layout.recLayout);
+      this.noteFrom = new Float32Array(layout.noteLayout);
+      this.morphCur = 1;
+    }
+    to.set(layout.recLayout);
+    toA.needsUpdate = true;
+    fromA.needsUpdate = true;
+    this.layout = layout;
+    this.buildScaffold();
+    this.updateFrameDist();
+    if (this.view.form > 0.5 && (!prev || prev.frame?.cx !== layout.frame?.cx || prev.frame?.w !== layout.frame?.w)) this.home();
     this.notesDirty = true;
+  }
+
+  /** Pixels on the left covered by a panel: the view is centred in what is left. */
+  setInsetLeft(px: number) {
+    if (px === this.insetLeft) return;
+    this.insetLeft = px;
+    this.resize();
+  }
+  private insetLeft = 0;
+
+  /** Per-note size factor (table builder "Size"); null resets. */
+  setSizeK(k: Float32Array | null) {
+    const anat = this.anat;
+    if (!anat || !this.notesGeo || !this.recGeo) return;
+    const ns = this.notesGeo.getAttribute("aSize") as THREE.BufferAttribute;
+    const na = ns.array as Float32Array;
+    for (let i = 0; i < anat.n; i++) na[i] = this.noteSizeBase[i] * (k ? k[i] : 1);
+    ns.needsUpdate = true;
+    const rs = this.recGeo.getAttribute("aSize") as THREE.BufferAttribute;
+    const ra = rs.array as Float32Array;
+    for (let j = 0; j < anat.recCount; j++) ra[j] = this.recSizeBase[j] * (k ? Math.sqrt(k[anat.recNote[j]]) : 1);
+    rs.needsUpdate = true;
+  }
+  private noteSizeBase: Float32Array = new Float32Array(0);
+  private recSizeBase: Float32Array = new Float32Array(0);
+
+  private buildScaffold() {
+    const sc = this.layout?.scaffold;
+    this.scaffoldGeo?.dispose();
+    if (this.scaffold) this.root.remove(this.scaffold);
+    this.scaffold = undefined;
+    this.scaffoldGeo = undefined;
+    if (!sc) return;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(sc.pos, 3));
+    g.setAttribute("color", new THREE.BufferAttribute(new Float32Array(sc.pos.length), 3));
+    this.scaffoldGeo = g;
+    this.scaffold = new THREE.LineSegments(g, this.scaffoldMat);
+    this.scaffold.frustumCulled = false;
+    this.root.add(this.scaffold);
+    this.colorScaffold();
+  }
+
+  private colorScaffold() {
+    const sc = this.layout?.scaffold;
+    if (!sc || !this.scaffoldGeo) return;
+    const col = this.scaffoldGeo.getAttribute("color") as THREE.BufferAttribute;
+    const a = col.array as Float32Array;
+    for (let sgi = 0; sgi < sc.group.length; sgi++) {
+      const gi = sc.group[sgi];
+      const c = gi >= 0 ? (this.groupRgbArr[gi] ?? [1, 1, 1]) : ([0.55, 0.55, 0.55] as [number, number, number]);
+      for (let v = 0; v < 2; v++) a.set(c, sgi * 6 + v * 3);
+    }
+    col.needsUpdate = true;
   }
 
   /** groupRgb: per group colour; mono=true when palette is greyscale. */
@@ -462,6 +571,8 @@ export class BrainScene {
     const anat = this.anat;
     if (!anat || !this.notesGeo || !this.recGeo || !this.linesGeo) return;
     const n = anat.n;
+    this.groupRgbArr = groupRgb;
+    this.colorScaffold();
     this.noteRgb = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       const c = groupRgb[this.groupOf[i]] ?? [1, 1, 1];
@@ -542,20 +653,39 @@ export class BrainScene {
 
   setView(v: SceneView) {
     const wasBrain = this.brainMode();
+    const wasLayout = this.layoutMode();
     this.view = v;
     this.applyVisibility();
-    if (wasBrain !== this.brainMode()) this.home();
+    if (wasBrain !== this.brainMode() || (wasLayout !== this.layoutMode() && this.layout?.frame)) this.home();
+  }
+
+  /** At Layout with a layout that brings its own frame (charts, trees). */
+  private layoutMode() {
+    return this.view.form > 0.5 && !!this.layout?.frame;
   }
 
   /** Focus brain: the camera frames the brain alone and the body fades out. */
   private brainMode() {
     return this.view.focusBrain && this.view.form < 0.5;
   }
+  private homeX() {
+    return this.layoutMode() ? this.layout!.frame!.cx : 0;
+  }
   private homeY() {
+    if (this.layoutMode()) return this.layout!.frame!.cy;
     return this.brainMode() ? BRAIN_C.y - 0.04 : FRAME_CY;
   }
   private homeDist() {
+    if (this.layoutMode()) return this.frameDist;
     return this.brainMode() ? this.brainDist : this.fitDist;
+  }
+  private updateFrameDist() {
+    const f = this.layout?.frame;
+    if (!f) return;
+    const t = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    const w = Math.max(1, this.host.clientWidth - this.insetLeft);
+    const aspect = w / Math.max(1, this.host.clientHeight);
+    this.frameDist = Math.max(f.h / 2 / t, f.w / 2 / t / aspect);
   }
 
   setLabels(labels: SceneLabel[], size: "auto" | "small" | "large") {
@@ -574,7 +704,8 @@ export class BrainScene {
         return;
       }
       el.textContent = l.text;
-      el.classList.toggle("strong", !!l.strong);
+      el.className = "brain-label" + (l.strong ? " strong" : "") + (l.kind ? ` ${l.kind}` : "");
+      el.style.color = l.kind === "title" && l.group != null && this.groupRgbArr[l.group] ? `rgb(${this.groupRgbArr[l.group].map((c) => Math.round(Math.min(1, c * 1.1 + 0.15) * 255)).join(",")})` : "";
       el.style.display = "";
     });
   }
@@ -606,8 +737,8 @@ export class BrainScene {
 
   resetCamera() {
     this.flyTo = null;
-    this.camera.position.set(0, this.homeY(), this.homeDist());
-    this.controls.target.set(0, this.homeY(), 0);
+    this.camera.position.set(this.homeX(), this.homeY(), this.homeDist());
+    this.controls.target.set(this.homeX(), this.homeY(), 0);
     this.root.rotation.set(0, 0, 0);
   }
 
@@ -626,7 +757,7 @@ export class BrainScene {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
     });
-    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat].forEach((m) => m.dispose());
+    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat].forEach((m) => m.dispose());
     this.renderer.dispose();
     el.remove();
     this.labelEls.forEach((e) => e.remove());
@@ -691,14 +822,18 @@ export class BrainScene {
 
   private updateNotePositions() {
     const anat = this.anat;
-    const gr = this.grouped;
+    const gr = this.layout;
     if (!anat || !gr || !this.notesGeo || !this.linesGeo) return;
     const f = this.formCur;
     const s = this.splitCur;
     const P = this.notePosCur;
+    const mm = this.morphCur;
+    const m = mm * mm * (3 - 2 * mm);
+    const nf = this.noteFrom.length === gr.noteLayout.length ? this.noteFrom : gr.noteLayout;
     for (let i = 0; i < anat.n * 3; i++) {
       const a = anat.notePos[i] + (anat.noteSplit[i] - anat.notePos[i]) * s;
-      P[i] = a + (gr.noteLayout[i] - a) * f;
+      const lay = nf[i] + (gr.noteLayout[i] - nf[i]) * m;
+      P[i] = a + (lay - a) * f;
     }
     (this.notesGeo.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
     this.notesGeo.computeBoundingSphere();
@@ -782,6 +917,8 @@ export class BrainScene {
     const h = Math.max(1, this.host.clientHeight);
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    if (this.insetLeft > 0 && w > this.insetLeft * 2) this.camera.setViewOffset(w, h, -this.insetLeft / 2, 0, w, h);
+    else this.camera.clearViewOffset();
     const t = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
     const distH = (FRAME.top - FRAME.bottom) / 2 / t;
     const distW = FRAME.width / 2 / t / this.camera.aspect;
@@ -789,6 +926,7 @@ export class BrainScene {
     this.fitDist = Math.max(distH, distW);
     // the brain alone: about 1.35 wide and 1.6 tall, with a margin for labels
     this.brainDist = Math.max(2.05 / 2 / t, 2.0 / 2 / t / this.camera.aspect);
+    this.updateFrameDist();
     // keep the viewing direction and relative zoom, rescaled to the new fit
     const off = this.camera.position.clone().sub(this.controls.target);
     off.multiplyScalar(this.homeDist() / prev);
@@ -813,6 +951,11 @@ export class BrainScene {
     this.splitCur = ease(this.splitCur, this.view.split ? 1 : 0, dt, 3.2);
     const formMoving = fPrev !== this.formCur;
     if (formMoving || sPrev !== this.splitCur) this.notesDirty = true;
+    if (this.morphCur < 1) {
+      this.morphCur = Math.min(1, this.morphCur + dt * 0.75);
+      this.notesDirty = true;
+    }
+    this.recMat.uniforms.uMorph.value = this.morphCur;
     if (this.notesDirty) {
       this.updateNotePositions();
       this.notesDirty = false;
@@ -833,7 +976,10 @@ export class BrainScene {
     this.recMat.uniforms.uBodyK.value = this.bodyCur;
     this.fibreMat.uniforms.uOpacity.value = 0.2 * (1 - this.formCur) * (1 - this.hasLitCur * 0.3) * this.bodyCur;
     if (this.fibres) this.fibres.visible = this.bodyCur > 0.01 && this.formCur < 0.98;
-    this.linesMat.uniforms.uOpacity.value = (0.1 + 0.08 * this.formCur) * (1 + this.hasLitCur * 1.4);
+    const chartK = this.layout?.flat ? 1 - 0.6 * this.formCur : 1;
+    this.linesMat.uniforms.uOpacity.value = (0.1 + 0.08 * this.formCur) * (1 + this.hasLitCur * 1.4) * chartK;
+    this.scaffoldMat.uniforms.uOpacity.value = 0.42 * Math.max(0, this.formCur - 0.4) / 0.6 * Math.min(1, this.morphCur * 1.5);
+    if (this.scaffold) this.scaffold.visible = this.formCur > 0.4;
 
     // camera target follows the form
     const ty = this.homeY();
@@ -842,7 +988,7 @@ export class BrainScene {
       const ft =
         f.note != null
           ? new THREE.Vector3(this.notePosCur[f.note * 3], this.notePosCur[f.note * 3 + 1], this.notePosCur[f.note * 3 + 2]).applyMatrix4(this.root.matrixWorld)
-          : new THREE.Vector3(0, ty, 0);
+          : new THREE.Vector3(this.homeX(), ty, 0);
       this.controls.target.lerp(ft, Math.min(1, dt * 3));
       const off = this.camera.position.clone().sub(this.controls.target);
       const len = off.length();
@@ -853,8 +999,13 @@ export class BrainScene {
       this.controls.target.y += (ty - this.controls.target.y) * Math.min(1, dt * 3);
     }
 
-    // turning
-    if (this.view.turning && !this.userTurning && !this.reduced) {
+    // turning; flat charts stop and face the camera
+    const flat = !!this.layout?.flat && this.formCur > 0.5;
+    if (flat) {
+      const y = this.root.rotation.y;
+      const wrapped = Math.atan2(Math.sin(y), Math.cos(y));
+      this.root.rotation.y = Math.abs(wrapped) < 0.0005 ? 0 : wrapped * (1 - Math.min(1, dt * 3));
+    } else if (this.view.turning && !this.userTurning && !this.reduced) {
       this.root.rotation.y += dt * 0.07 * (this.view.speed / 100);
     }
     this.controls.update(dt);
@@ -897,7 +1048,10 @@ export class BrainScene {
       const el = this.labelEls[i];
       if (!el) return;
       let ok = true;
-      if (l.note != null) {
+      if (l.pos) {
+        if (this.formCur < 0.6) ok = false;
+        this.v3.set(l.pos[0], l.pos[1], l.pos[2]);
+      } else if (l.note != null) {
         if (!this.noteVis[l.note]) ok = false;
         this.v3.set(this.notePosCur[l.note * 3], this.notePosCur[l.note * 3 + 1], this.notePosCur[l.note * 3 + 2]);
       } else if (l.group != null) {
@@ -906,22 +1060,23 @@ export class BrainScene {
         this.v3.set(c[l.group * 4], c[l.group * 4 + 1], c[l.group * 4 + 2]);
       }
       this.v3.applyMatrix4(this.root.matrixWorld).project(this.camera);
-      if (!ok || this.v3.z > 1 || !this.view.notes) {
+      if (!ok || this.v3.z > 1 || (!this.view.notes && !l.pos)) {
         el.style.opacity = "0";
         return;
       }
       const x = (this.v3.x * 0.5 + 0.5) * w;
       const y = (-this.v3.y * 0.5 + 0.5) * h;
       // greedy de-overlap: earlier (stronger) labels win
-      const lw = l.text.length * (lh * 0.42) + 12;
-      const box = [x + 10, y - lh / 2, x + 10 + lw, y + lh / 2];
-      if (placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) {
+      const left = l.kind === "axisL";
+      const lw = l.text.length * (lh * (l.kind ? 0.36 : 0.42)) + 12;
+      const box = left ? [x - 10 - lw, y - lh / 2, x - 10, y + lh / 2] : [x + 10, y - lh / 2, x + 10 + lw, y + lh / 2];
+      if (l.kind !== "box" && placed.some((b) => box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1])) {
         el.style.opacity = "0";
         return;
       }
       placed.push(box);
       el.style.opacity = "1";
-      el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)`;
+      el.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px)${left ? " translateX(-100%)" : ""}`;
     });
   }
 
