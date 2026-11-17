@@ -1,26 +1,9 @@
-import { getAllPages } from "@/lib/wiki";
-import { buildGraph } from "@/lib/graph";
-import HomeClient from "@/components/HomeClient";
+import { getAllPages, getRepoInfo, hasWikiSource } from "@/lib/wiki";
+import BrainApp from "@/components/app/BrainApp";
 
-export const revalidate = 3600;
+export const revalidate = 300;
 
 export default async function Home() {
   const pages = await getAllPages();
-  const graphData = buildGraph(pages);
-
-  const domainSet = new Set<string>();
-  for (const p of pages) {
-    for (const d of p.domain) {
-      if (d !== "uncategorized") domainSet.add(d);
-    }
-  }
-  const allDomains = Array.from(domainSet).sort();
-
-  return (
-    <HomeClient
-      pages={pages}
-      graphData={graphData}
-      allDomains={allDomains}
-    />
-  );
+  return <BrainApp pages={pages} repo={getRepoInfo()} usingSample={!hasWikiSource()} />;
 }
