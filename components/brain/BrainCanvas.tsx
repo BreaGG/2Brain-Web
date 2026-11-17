@@ -1,0 +1,136 @@
+"use client";
+
+import { useEffect, useMemo, useRef } from "react";
+import type { Model, GroupBy } from "@/lib/brain";
+import type { Settings } from "@/lib/settings";
+import { buildAnatomy, buildGrouped } from "./anatomy";
+import { BrainScene, type SceneLabel } from "./scene";
+
+export interface BrainCanvasProps {
+  model: Model;
+  settings: Settings;
+  groupBy: GroupBy;
+  groupOf: Int32Array;
+  groupCount: number;
+  groupRgb: [number, number, number][];
+  noteLit: Uint8Array | null;
+  recLit: Uint8Array | null;
+  hidden: Uint8Array;
+  labels: SceneLabel[];
+  selected: number | null;
+  focusNote: number | null;
+  resetKey: number;
+  onHover: (i: number | null, x: number, y: number) => void;
+  onPick: (i: number | null) => void;
+  onClear: () => void;
+}
+
+export default function BrainCanvas(p: BrainCanvasProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const labelHost = useRef<HTMLDivElement>(null);
+  const sceneRef = useRef<BrainScene | null>(null);
+  const cbs = useRef({ onHover: p.onHover, onPick: p.onPick, onClear: p.onClear });
+  useEffect(() => {
+    cbs.current = { onHover: p.onHover, onPick: p.onPick, onClear: p.onClear };
+  });
+
+  const maxRecord = useMemo(() => {
+    if (typeof window === "undefined") return 30000;
+    const small = window.innerWidth < 860;
+    const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
+    return small || mem < 4 ? 16000 : 42000;
+  }, []);
+
+  const anat = useMemo(() => buildAnatomy(p.model, maxRecord), [p.model, maxRecord]);
+  const grouped = useMemo(() => buildGrouped(p.model, p.groupBy, anat), [p.model, p.groupBy, anat]);
+
+  // mount
+  useEffect(() => {
+    if (!host.current || !labelHost.current) return;
+    let scene: BrainScene;
+    try {
+      scene = new BrainScene(host.current, labelHost.current, {
+        onHover: (i, x, y) => cbs.current.onHover(i, x, y),
+        onPick: (i) => cbs.current.onPick(i),
+        onClear: () => cbs.current.onClear(),
+      });
+    } catch (e) {
+      console.error("[2brain] WebGL unavailable", e);
+      if (host.current) host.current.dataset.nogl = "1";
+      return;
+    }
+    sceneRef.current = scene;
+    return () => {
+      scene.dispose();
+      sceneRef.current = null;
+    };
+  }, []);
+
+  const s = sceneRef;
+  useEffect(() => {
+    s.current?.setAnatomy(anat, p.model.links, p.model.ghostSlugs);
+  }, [anat, p.model, s]);
+
+  useEffect(() => {
+    s.current?.setGrouped(grouped, p.groupOf, p.groupCount);
+  }, [grouped, p.groupOf, p.groupCount, s, anat]);
+
+  useEffect(() => {
+    s.current?.setColors(p.groupRgb);
+  }, [p.groupRgb, grouped, anat, s]);
+
+  useEffect(() => {
+    s.current?.setLit(p.noteLit, p.recLit);
+  }, [p.noteLit, p.recLit, anat, grouped, s]);
+
+  useEffect(() => {
+    s.current?.setHidden(p.hidden);
+  }, [p.hidden, anat, s]);
+
+  const st = p.settings;
+  useEffect(() => {
+    s.current?.setView({
+      form: st.form,
+      split: st.split,
+      turning: st.turning,
+      speed: st.speed,
+      links: st.links,
+      outline: st.outline,
+      outlineOpacity: st.outlineOpacity,
+      pointSize: st.pointSize,
+      notes: st.notes,
+      record: st.record,
+      ghosts: st.ghosts,
+    });
+  }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, s, anat]);
+
+  useEffect(() => {
+    s.current?.setLabels(p.labels, st.labelSize);
+  }, [p.labels, st.labelSize, s]);
+
+  useEffect(() => {
+    s.current?.setSelected(p.selected);
+  }, [p.selected, s]);
+
+  const zoomed = useRef(false);
+  useEffect(() => {
+    if (p.focusNote != null) {
+      s.current?.focusNote(p.focusNote);
+      zoomed.current = true;
+    } else if (zoomed.current) {
+      s.current?.home();
+      zoomed.current = false;
+    }
+  }, [p.focusNote, s]);
+
+  useEffect(() => {
+    if (p.resetKey) s.current?.resetCamera();
+  }, [p.resetKey, s]);
+
+  return (
+    <div className="brain-host" data-knowledge-graph="">
+      <div ref={host} className="brain-host" />
+      <div ref={labelHost} className="brain-labels" />
+    </div>
+  );
+}

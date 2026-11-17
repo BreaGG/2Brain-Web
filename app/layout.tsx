@@ -1,36 +1,27 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import { Providers } from "@/components/Providers";
+import { Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// Alte Haas Grotesk / Helvetica Neue lead the stack (see globals.css); Inter is the
+// web fallback for systems without them, IBM Plex Mono is used for file paths.
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
+const plexMono = IBM_Plex_Mono({ variable: "--font-plex-mono", subsets: ["latin"], weight: ["400", "500"] });
 
 export const metadata: Metadata = {
   title: "2Brain",
-  description: "Personal knowledge base",
+  description: "A second brain you can see: every note in the head, every passage down the spine.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: "#00000f",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html
-      lang="en"
-      suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased dark`}
-    >
-      <body className="h-full" style={{ backgroundColor: "var(--bg-primary)", color: "var(--text-primary)" }}>
-        <Providers>
-          {children}
-        </Providers>
-      </body>
+    <html lang="en" className={`${inter.variable} ${plexMono.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }

@@ -1,37 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 2Brain
 
-## Getting Started
+A second brain you can see. Every page of the wiki is a point in the head; every passage of every page runs down the spine and out along the nerves, in the order it was written. Links between pages are drawn as lines.
 
-First, run the development server:
+## The interface (v2)
+
+- **Rail** (left): Brain, Navigator, Numbers, Timeline, You, Lab, Review, Files, Learn and Add, plus search (`⌘K`), a small map of your groups and three health figures (sorted, linked, to review).
+- **Brain**: a three.js point cloud. Drag to turn, scroll to zoom, right-drag to move, point at a dot to see its note, click to open it, double-click to clear.
+- **View panel** (sliders icon, or `V`): colour theme, data colours (Default, Lava, Ocean, Forest, Aurora, Mono, Sunset), Form (anatomy ↔ layout), table builder, notes / record / ghost links, group by folder / domain / type, split, labels, hide unsorted, turning and speed, links, brain outline and point size. Settings are remembered per browser.
+- **Legend** (bottom): every group with its notes · record counts. Click to light a group, shift-click to add one.
+- **Activity** (bottom right): notes per month; drag to light a period.
+- **Panes**: Navigator (folders, types, months and every note), Numbers, Timeline, You (hubs and what to work on next), Lab (table builder, gesture control, link analysis), Review (ghost links, orphans, missing fields), Files, Learn and Add.
+- **Reader**: opening a note shows it beside the brain and lights it and its neighbours. Its URL is `/wiki/<folder>/<slug>`.
+
+The previous interface is kept untouched in [`_backup/ui-v1/`](_backup/ui-v1/README.md).
+
+## Data
+
+The wiki is read from a GitHub repository (`wiki/**/*.md`):
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+GITHUB_OWNER=…   # owner of the wiki repository
+GITHUB_REPO=…    # repository name
+GITHUB_TOKEN=…   # token with read access
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Without these variables the app shows a built-in sample wiki, so it can run locally with no setup.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+A note is read like this:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```markdown
+# Title
 
-## Learn More
+**Type:** concept | person | source-summary | synthesis
+**Domain:** research / reading
+**Sources:** [[a-source]]
+**Last updated:** 2026-11-17
 
-To learn more about Next.js, take a look at the following resources:
+Body with [[links]] to other notes.
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Development
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-# 2Brain-Web
+```bash
+npm install
+npm run dev
+```
