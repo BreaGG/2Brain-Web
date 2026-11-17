@@ -135,6 +135,7 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
         <section className="viz-section">
           <div className="label">Drawn</div>
           <SwitchRow label="Links" on={s.links} onChange={(v) => set("links", v)} />
+          <SwitchRow label="Tracts" on={s.tracts} onChange={(v) => set("tracts", v)} />
           <div className="switch-row">
             <span>Brain outline</span>
             <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
