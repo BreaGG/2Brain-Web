@@ -393,6 +393,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
             sizeK={sizeK}
             noteLit={noteLit}
             recLit={recLit}
+            core={focus.kind === "note" && model.notes[focus.i]?.id === "index"}
             hidden={hidden}
             labels={labels}
             selected={selected}

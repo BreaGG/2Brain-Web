@@ -20,6 +20,8 @@ export interface BrainCanvasProps {
   sizeK: Float32Array | null;
   noteLit: Uint8Array | null;
   recLit: Uint8Array | null;
+  /** The root index is lit: light the whole spinal column too. */
+  core?: boolean;
   hidden: Uint8Array;
   labels: SceneLabel[];
   selected: number | null;
@@ -110,8 +112,8 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   }, [p.groupRgb, grouped, anat, s]);
 
   useEffect(() => {
-    s.current?.setLit(p.noteLit, p.recLit);
-  }, [p.noteLit, p.recLit, anat, grouped, s]);
+    s.current?.setLit(p.noteLit, p.recLit, !!p.core);
+  }, [p.noteLit, p.recLit, p.core, anat, grouped, s]);
 
   useEffect(() => {
     s.current?.setHidden(p.hidden);
@@ -161,14 +163,18 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   const zoomed = useRef(false);
   useEffect(() => {
     if (!anat) return;
-    if (p.focusNote != null) {
+    if (p.focusNote != null && p.core) {
+      // the root index is the whole column: show all of it rather than flying to one point
+      s.current?.home();
+      zoomed.current = false;
+    } else if (p.focusNote != null) {
       s.current?.focusNote(p.focusNote);
       zoomed.current = true;
     } else if (zoomed.current) {
       s.current?.home();
       zoomed.current = false;
     }
-  }, [p.focusNote, s, anat]);
+  }, [p.focusNote, p.core, s, anat]);
 
   useEffect(() => {
     if (p.resetKey) s.current?.resetCamera();

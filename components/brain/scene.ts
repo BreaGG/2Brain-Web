@@ -357,6 +357,8 @@ export class BrainScene {
     this.controls.dampingFactor = 0.08;
     this.controls.rotateSpeed = 0.55;
     this.controls.zoomSpeed = 0.8;
+    // the wheel is ours: two fingers turn, a pinch zooms (see onWheel)
+    this.controls.enableZoom = false;
     this.controls.minDistance = 2.5;
     this.controls.maxDistance = 42;
     this.controls.target.set(0, FRAME_CY, 0);
@@ -372,6 +374,9 @@ export class BrainScene {
     const el = this.renderer.domElement;
     el.addEventListener("pointermove", this.onMove);
     el.addEventListener("pointerdown", this.onDown);
+    el.addEventListener("wheel", this.onWheel, { passive: false });
+    el.addEventListener("gesturestart", this.onGesture as EventListener);
+    el.addEventListener("gesturechange", this.onGesture as EventListener);
     el.addEventListener("pointerup", this.onUp);
     el.addEventListener("pointerleave", this.onLeave);
     el.addEventListener("dblclick", this.onDbl);
@@ -765,7 +770,7 @@ export class BrainScene {
     this.updateFibreColors();
   }
 
-  setLit(noteLit: Uint8Array | null, recLitByNote: Uint8Array | null) {
+  setLit(noteLit: Uint8Array | null, recLitByNote: Uint8Array | null, core = false) {
     const anat = this.anat;
     if (!anat || !this.notesGeo || !this.recGeo) return;
     this.noteLit = noteLit;
@@ -778,6 +783,8 @@ export class BrainScene {
     const ra = rl.array as Float32Array;
     const src = recLitByNote ?? noteLit;
     for (let k = 0; k < anat.recCount; k++) ra[k] = src ? Math.min(1, src[anat.recNote[k]]) : 0;
+    // the root index is the core: the whole spinal column lights with it
+    if (core) for (let k = 0; k < anat.recCount; k++) if (anat.recKind[k] === KIND_SPINE || anat.recKind[k] === KIND_STEM) ra[k] = 1;
     rl.needsUpdate = true;
     this.recLit = src ? ra : null;
     this.updateLinkColors();
@@ -897,6 +904,9 @@ export class BrainScene {
     const el = this.renderer.domElement;
     el.removeEventListener("pointermove", this.onMove);
     el.removeEventListener("pointerdown", this.onDown);
+    el.removeEventListener("wheel", this.onWheel);
+    el.removeEventListener("gesturestart", this.onGesture as EventListener);
+    el.removeEventListener("gesturechange", this.onGesture as EventListener);
     el.removeEventListener("pointerup", this.onUp);
     el.removeEventListener("pointerleave", this.onLeave);
     el.removeEventListener("dblclick", this.onDbl);
@@ -1177,7 +1187,7 @@ export class BrainScene {
       const y = this.root.rotation.y;
       const wrapped = Math.atan2(Math.sin(y), Math.cos(y));
       this.root.rotation.y = Math.abs(wrapped) < 0.0005 ? 0 : wrapped * (1 - Math.min(1, dt * 3));
-    } else if (this.view.turning && !this.userTurning && !this.reduced) {
+    } else if (this.view.turning && !this.userTurning && !this.reduced && performance.now() - this.lastGesture > 1600) {
       this.root.rotation.y += dt * 0.07 * (this.view.speed / 100);
     }
     this.controls.update(dt);
@@ -1284,6 +1294,61 @@ export class BrainScene {
       this.renderer.domElement.style.cursor = i != null ? "pointer" : "";
     }
     this.cb.onHover(i, e.clientX, e.clientY);
+  };
+
+  private lastGesture = 0;
+  private gestureScale = 1;
+
+  /** Move the camera closer (k < 1) or further (k > 1) from what it looks at. */
+  private dolly(k: number) {
+    const off = this.camera.position.clone().sub(this.controls.target);
+    const len = Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, off.length() * k));
+    off.setLength(len);
+    this.camera.position.copy(this.controls.target).add(off);
+  }
+
+  /** Turn the camera round what it looks at, within the controls' limits. */
+  private orbit(dTheta: number, dPhi: number) {
+    const c = this.controls;
+    const off = this.camera.position.clone().sub(c.target);
+    const sph = new THREE.Spherical().setFromVector3(off);
+    sph.theta += dTheta;
+    sph.phi += dPhi;
+    if (Number.isFinite(c.minAzimuthAngle) && Number.isFinite(c.maxAzimuthAngle)) sph.theta = Math.min(c.maxAzimuthAngle, Math.max(c.minAzimuthAngle, sph.theta));
+    sph.phi = Math.min(Math.min(Math.PI - 0.01, c.maxPolarAngle), Math.max(Math.max(0.01, c.minPolarAngle), sph.phi));
+    off.setFromSpherical(sph);
+    this.camera.position.copy(c.target).add(off);
+  }
+
+  /**
+   * Trackpad: two fingers turn the brain, a pinch zooms (browsers report a pinch
+   * as a wheel event with ctrlKey). A mouse wheel, which moves in whole lines or
+   * big notches with no sideways part, still zooms.
+   */
+  private onWheel = (e: WheelEvent) => {
+    e.preventDefault();
+    this.flyTo = null;
+    this.lastGesture = performance.now();
+    const px = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    const dx = e.deltaX * px;
+    const dy = e.deltaY * px;
+    const mouseWheel = e.deltaMode !== 0 || (dx === 0 && Math.abs(dy) >= 50 && Number.isInteger(dy));
+    if (e.ctrlKey) this.dolly(Math.exp(dy * 0.012));
+    else if (mouseWheel) this.dolly(Math.exp(dy * 0.0015));
+    else this.orbit(dx * 0.006, dy * 0.006);
+  };
+
+  /** Safari reports a trackpad pinch as gesture events instead. */
+  private onGesture = (e: Event & { scale?: number; type: string }) => {
+    e.preventDefault();
+    const scale = e.scale ?? 1;
+    if (e.type === "gesturestart") this.gestureScale = 1;
+    else if (scale > 0) {
+      this.dolly(this.gestureScale / scale);
+      this.gestureScale = scale;
+    }
+    this.flyTo = null;
+    this.lastGesture = performance.now();
   };
 
   private onDown = (e: PointerEvent) => {
