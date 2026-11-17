@@ -29,6 +29,7 @@ export interface SceneView {
   ghosts: boolean;
   focusBrain: boolean;
   tracts: boolean;
+  limitRotation: boolean;
 }
 
 export interface SceneLabel {
@@ -311,6 +312,7 @@ export class BrainScene {
     ghosts: false,
     focusBrain: false,
     tracts: true,
+    limitRotation: false,
   };
   private bodyCur = 1;
   private formCur = 0;
@@ -913,6 +915,19 @@ export class BrainScene {
 
   private applyVisibility() {
     const v = this.view;
+    // limit rotation: a gentle tilt and a quarter turn either side, never upside down
+    const c = this.controls;
+    if (v.limitRotation) {
+      c.minPolarAngle = Math.PI / 2 - 0.45;
+      c.maxPolarAngle = Math.PI / 2 + 0.45;
+      c.minAzimuthAngle = -0.8;
+      c.maxAzimuthAngle = 0.8;
+    } else {
+      c.minPolarAngle = 0;
+      c.maxPolarAngle = Math.PI;
+      c.minAzimuthAngle = -Infinity;
+      c.maxAzimuthAngle = Infinity;
+    }
     if (this.notes) this.notes.visible = v.notes;
     if (this.rec) this.rec.visible = v.record || v.outline;
     if (this.fibres) this.fibres.visible = v.record && !v.focusBrain;

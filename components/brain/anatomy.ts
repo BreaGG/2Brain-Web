@@ -149,7 +149,7 @@ const d2 = (P: Float32Array, a: number, Q: Float32Array, b: number) => {
   return x * x + y * y + z * z;
 };
 
-export function buildAnatomy(model: Model, atlas: Atlas, opts: { small: boolean }): Anatomy {
+export function buildAnatomy(model: Model, atlas: Atlas, opts: { small: boolean; newestFirst?: boolean }): Anatomy {
   const r = rng(4242 + model.notes.length);
   const n = model.notes.length;
   const BP = atlas.brainPos;
@@ -315,7 +315,13 @@ export function buildAnatomy(model: Model, atlas: Atlas, opts: { small: boolean 
   /* 6. Hand the body out in the order the notes were written. */
   const byDate = model.notes
     .map((x, i) => i)
-    .sort((a, b) => (model.notes[a].date ?? Infinity) - (model.notes[b].date ?? Infinity) || a - b);
+    .sort((a, b) => {
+      const da = model.notes[a].date;
+      const db = model.notes[b].date;
+      // undated notes always come last
+      if (da == null || db == null) return (da == null ? 1 : 0) - (db == null ? 1 : 0) || a - b;
+      return (opts.newestFirst ? db - da : da - db) || a - b;
+    });
   const weight = byDate.map((i) => Math.max(1, model.notes[i].words));
   const cum: number[] = [];
   weight.reduce((acc, w, k) => (cum[k] = acc + w), 0);

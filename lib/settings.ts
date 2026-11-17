@@ -5,6 +5,7 @@ import type { AnswerKey, AxisKey, FormKey, SizeKey } from "./table";
 export type LabelMode = "lit" | "all" | "none";
 export type LabelSize = "auto" | "small" | "large";
 export type GroupLayout = "spheres" | "tree";
+export type RecordOrder = "oldest" | "newest";
 
 export interface Settings {
   theme: ThemeId;
@@ -21,6 +22,8 @@ export interface Settings {
   tbMono: boolean;
   tbCounts: boolean;
   focusBrain: boolean;
+  order: RecordOrder;
+  limitRotation: boolean;
   notes: boolean;
   record: boolean;
   ghosts: boolean;
@@ -55,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   tbMono: false,
   tbCounts: false,
   focusBrain: false,
+  order: "oldest",
+  limitRotation: false,
   notes: true,
   record: true,
   ghosts: false,

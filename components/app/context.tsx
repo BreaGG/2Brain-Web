@@ -48,6 +48,11 @@ export interface AppApi {
   usingSample: boolean;
   gestures: boolean;
   setGestures: (v: boolean) => void;
+  replaceSettings: (s: Settings) => void;
+  startTour: () => void;
+  /** Showing the built-in demo brain instead of the wiki. */
+  demo: boolean;
+  setDemo: (v: boolean) => void;
 }
 
 export const AppCtx = createContext<AppApi | null>(null);

@@ -4,6 +4,8 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { ParsedPage } from "@/lib/types";
 import { buildModel } from "@/lib/brain";
+import { parsePage } from "@/lib/parser";
+import { sampleWikiFiles } from "@/lib/sample";
 import { DEFAULT_SETTINGS, loadSettings, saveSettings, type Settings } from "@/lib/settings";
 import { THEMES, groupRgb, rgbCss } from "@/lib/palettes";
 import type { SceneLabel } from "@/components/brain/scene";
@@ -13,6 +15,7 @@ import Rail from "./Rail";
 import StageOverlay from "./StageOverlay";
 import CommandBar from "./CommandBar";
 import Panes from "./Panes";
+import Walkthrough from "./Walkthrough";
 import { Icon, Wordmark } from "@/components/ui";
 
 const BrainCanvas = dynamic(() => import("@/components/brain/BrainCanvas"), {
@@ -31,7 +34,10 @@ interface Props {
 const PANE_IDS = new Set<PaneId>(["navigator", "numbers", "timeline", "you", "lab", "review", "files", "learn", "add"]);
 
 export default function BrainApp({ pages, initialSlug, repo, usingSample }: Props) {
-  const model = useMemo(() => buildModel(pages), [pages]);
+  const [demo, setDemoState] = useState(false);
+  const demoPages = useMemo(() => (demo ? sampleWikiFiles().map((f) => parsePage(f.path, f.content)) : null), [demo]);
+  const model = useMemo(() => buildModel(demoPages ?? pages), [pages, demoPages]);
+  const [tour, setTour] = useState(false);
 
   /* ── settings (persisted per browser) ─────────────────────────────────── */
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -54,6 +60,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
     [],
   );
   const resetSettings = useCallback(() => setSettings(DEFAULT_SETTINGS), []);
+  const replaceSettings = useCallback((next: Settings) => setSettings(next), []);
 
   /* ── grouping + colours ───────────────────────────────────────────────── */
   const grouping = model.groups[settings.groupBy];
@@ -327,6 +334,18 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
     usingSample,
     gestures,
     setGestures,
+    replaceSettings,
+    startTour: () => setTour(true),
+    demo,
+    setDemo: (v: boolean) => {
+      setDemoState(v);
+      setPane(null);
+      setPrevPane(null);
+      setNoteIdx(null);
+      setFocusState({ kind: "none" });
+      setFocusNote(null);
+      syncUrl("/", false);
+    },
   };
 
   const selected = focus.kind === "note" ? focus.i : null;
@@ -388,6 +407,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample }: Prop
 
         {cmd.open && <CommandBar initial={cmd.q} onClose={() => setCmd({ open: false, q: "" })} setVizOpen={setVizOpen} />}
         {gestures && <HandTracking active={gestures} onClose={() => setGestures(false)} />}
+        {tour && <Walkthrough onEnd={() => setTour(false)} />}
       </div>
     </AppCtx.Provider>
   );
