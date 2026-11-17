@@ -28,6 +28,7 @@ export interface SceneView {
   record: boolean;
   ghosts: boolean;
   focusBrain: boolean;
+  tracts: boolean;
 }
 
 export interface SceneLabel {
@@ -111,6 +112,37 @@ const LINE_FS = /* glsl */ `
   varying vec3 vC;
   void main() {
     gl_FragColor = vec4(vC * uOpacity, uOpacity * 0.6);
+  }
+`;
+
+/* Tracts: streams of light running along curves between linked notes. */
+const TRACT_VS = /* glsl */ `
+  attribute vec3 aA;
+  attribute vec3 aB;
+  attribute vec3 aC;
+  attribute vec3 aColA;
+  attribute vec3 aColB;
+  attribute float aSeed;
+  attribute float aW;
+  uniform float uTime;
+  uniform float uPx;
+  uniform float uAlpha;
+  uniform float uSpread;
+  varying vec3 vColor;
+  varying float vAlpha;
+  void main() {
+    float sp = 0.16 + 0.24 * fract(aSeed * 13.7);
+    float t = fract(aSeed * 3.1 + uTime * sp);
+    float u = 1.0 - t;
+    vec3 p = u * u * aA + 2.0 * u * t * aC + t * t * aB;
+    vec3 j = vec3(fract(aSeed * 91.3) - 0.5, fract(aSeed * 47.9) - 0.5, fract(aSeed * 23.1) - 0.5);
+    float bell = sin(3.14159 * t);
+    p += j * uSpread * bell;
+    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = max(1.0, (1.7 + 1.1 * fract(aSeed * 5.3)) * uPx * 18.0 / -mv.z);
+    vColor = mix(mix(aColA, aColB, t), vec3(1.0), 0.28) * 1.35;
+    vAlpha = aW * uAlpha * pow(max(bell, 0.0), 0.45);
   }
 `;
 
@@ -239,6 +271,20 @@ export class BrainScene {
   );
   private ghostFrom: number[][] = [];
 
+  private tractGeo?: THREE.BufferGeometry;
+  private tractPts?: THREE.Points;
+  private tractMat = additive(
+    new THREE.ShaderMaterial({
+      vertexShader: TRACT_VS,
+      fragmentShader: POINT_FS,
+      uniforms: { uTime: { value: 0 }, uPx: { value: 1 }, uAlpha: { value: 0 }, uSpread: { value: 0.05 } },
+    }),
+  );
+  private tractLinks: { a: number; b: number; w: number }[] = [];
+  private tractKey = "";
+  private nbrs: number[][] = [];
+  private hubs: number[] = [];
+
   private ring: THREE.Points;
   private ringMat = additive(
     new THREE.ShaderMaterial({
@@ -264,6 +310,7 @@ export class BrainScene {
     record: true,
     ghosts: false,
     focusBrain: false,
+    tracts: true,
   };
   private bodyCur = 1;
   private formCur = 0;
@@ -437,6 +484,20 @@ export class BrainScene {
     this.lines.renderOrder = 2;
     this.root.add(this.lines);
 
+    // neighbours (for tracts) and the biggest hubs
+    this.nbrs = Array.from({ length: n }, () => [] as number[]);
+    for (const [a, b] of links) {
+      this.nbrs[a].push(b);
+      this.nbrs[b].push(a);
+    }
+    this.hubs = this.nbrs
+      .map((l, i) => [i, l.length] as const)
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 3)
+      .filter((x) => x[1] > 0)
+      .map((x) => x[0]);
+    this.buildTracts();
+
     // ghosts
     this.ghostFrom = ghosts.map((g) => g.from);
     const Gh = ghosts.length;
@@ -510,6 +571,90 @@ export class BrainScene {
     this.updateFrameDist();
     if (this.view.form > 0.5 && (!prev || prev.frame?.cx !== layout.frame?.cx || prev.frame?.w !== layout.frame?.w)) this.home();
     this.notesDirty = true;
+  }
+
+  private static TRACT_LINKS = 64;
+  private static TRACT_PER = 110;
+
+  private buildTracts() {
+    this.tractGeo?.dispose();
+    if (this.tractPts) this.root.remove(this.tractPts);
+    const P = BrainScene.TRACT_LINKS * BrainScene.TRACT_PER;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(P * 3), 3));
+    for (const name of ["aA", "aB", "aC", "aColA", "aColB"]) g.setAttribute(name, new THREE.BufferAttribute(new Float32Array(P * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    const seed = new Float32Array(P);
+    for (let i = 0; i < P; i++) seed[i] = ((i * 0.6180339887) % 1) + (i % 7) * 0.0137;
+    g.setAttribute("aSeed", new THREE.BufferAttribute(seed, 1));
+    g.setAttribute("aW", new THREE.BufferAttribute(new Float32Array(P), 1).setUsage(THREE.DynamicDrawUsage));
+    this.tractGeo = g;
+    this.tractPts = new THREE.Points(g, this.tractMat);
+    this.tractPts.frustumCulled = false;
+    this.tractPts.renderOrder = 4;
+    this.root.add(this.tractPts);
+    this.tractKey = "";
+  }
+
+  /** Which links carry tracts: the selected note's, the hovered note's, or the hubs' in focus brain. */
+  private chooseTracts() {
+    const sel = this.selected;
+    const hov = this.hovered;
+    const out: { a: number; b: number; w: number }[] = [];
+    const add = (i: number, w: number) => {
+      for (const j of this.nbrs[i] ?? []) if (this.noteVis[i] && this.noteVis[j]) out.push({ a: i, b: j, w });
+    };
+    if (sel != null) add(sel, 1);
+    if (hov != null && hov !== sel) add(hov, 0.6);
+    if (!out.length && this.view.focusBrain && this.formCur < 0.5) for (const h of this.hubs) add(h, 0.55);
+    return out.slice(0, BrainScene.TRACT_LINKS);
+  }
+
+  private updateTracts(force: boolean) {
+    const g = this.tractGeo;
+    if (!g || !this.anat) return;
+    const links = this.view.tracts ? this.chooseTracts() : [];
+    const key = links.map((l) => `${l.a}-${l.b}-${l.w}`).join(",");
+    const changed = key !== this.tractKey;
+    if (!changed && !force) return;
+    this.tractKey = key;
+    this.tractLinks = links;
+    const PER = BrainScene.TRACT_PER;
+    const A = g.getAttribute("aA") as THREE.BufferAttribute;
+    const B = g.getAttribute("aB") as THREE.BufferAttribute;
+    const C = g.getAttribute("aC") as THREE.BufferAttribute;
+    const CA = g.getAttribute("aColA") as THREE.BufferAttribute;
+    const CB = g.getAttribute("aColB") as THREE.BufferAttribute;
+    const Wt = g.getAttribute("aW") as THREE.BufferAttribute;
+    const a = A.array as Float32Array;
+    const b = B.array as Float32Array;
+    const c = C.array as Float32Array;
+    const ca = CA.array as Float32Array;
+    const cb = CB.array as Float32Array;
+    const w = Wt.array as Float32Array;
+    w.fill(0);
+    const P = this.notePosCur;
+    const f = this.formCur;
+    links.forEach((l, li) => {
+      const ax = P[l.a * 3], ay = P[l.a * 3 + 1], az = P[l.a * 3 + 2];
+      const bx = P[l.b * 3], by = P[l.b * 3 + 1], bz = P[l.b * 3 + 2];
+      const mx = (ax + bx) / 2, my = (ay + by) / 2, mz = (az + bz) / 2;
+      const len = Math.hypot(bx - ax, by - ay, bz - az);
+      // through the brain's white matter at anatomy; an arch over the chart at layout
+      const k = 0.42;
+      const cxA = mx + (BRAIN_C.x - mx) * k, cyA = my + (BRAIN_C.y - 0.05 - my) * k, czA = mz + (BRAIN_C.z - mz) * k;
+      const cxL = mx, cyL = my + len * 0.32, czL = mz + len * 0.12;
+      const cx = cxA + (cxL - cxA) * f, cy = cyA + (cyL - cyA) * f, cz = czA + (czL - czA) * f;
+      for (let p = 0; p < PER; p++) {
+        const o = (li * PER + p) * 3;
+        a[o] = ax; a[o + 1] = ay; a[o + 2] = az;
+        b[o] = bx; b[o + 1] = by; b[o + 2] = bz;
+        c[o] = cx; c[o + 1] = cy; c[o + 2] = cz;
+        ca[o] = this.noteRgb[l.a * 3] ?? 1; ca[o + 1] = this.noteRgb[l.a * 3 + 1] ?? 1; ca[o + 2] = this.noteRgb[l.a * 3 + 2] ?? 1;
+        cb[o] = this.noteRgb[l.b * 3] ?? 1; cb[o + 1] = this.noteRgb[l.b * 3 + 1] ?? 1; cb[o + 2] = this.noteRgb[l.b * 3 + 2] ?? 1;
+        w[li * PER + p] = l.w;
+      }
+    });
+    for (const attr of [A, B, C, CA, CB, Wt]) attr.needsUpdate = true;
   }
 
   /** Pixels on the left covered by a panel: the view is centred in what is left. */
@@ -613,6 +758,7 @@ export class BrainScene {
     }
     rc.needsUpdate = true;
     this.recRgb = arr;
+    this.updateTracts(true);
     this.updateLinkColors();
     this.updateFibreColors();
   }
@@ -757,7 +903,7 @@ export class BrainScene {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
     });
-    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat].forEach((m) => m.dispose());
+    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat, this.tractMat].forEach((m) => m.dispose());
     this.renderer.dispose();
     el.remove();
     this.labelEls.forEach((e) => e.remove());
@@ -933,7 +1079,7 @@ export class BrainScene {
     this.camera.position.copy(this.controls.target).add(off);
     this.camera.updateProjectionMatrix();
     const px = this.renderer.getPixelRatio();
-    for (const m of [this.notesMat, this.recMat, this.ghostMat, this.ringMat]) m.uniforms.uPx.value = px;
+    for (const m of [this.notesMat, this.recMat, this.ghostMat, this.ringMat, this.tractMat]) m.uniforms.uPx.value = px;
   }
 
   private loop = () => {
@@ -956,10 +1102,18 @@ export class BrainScene {
       this.notesDirty = true;
     }
     this.recMat.uniforms.uMorph.value = this.morphCur;
+    const moved = this.notesDirty;
     if (this.notesDirty) {
       this.updateNotePositions();
       this.notesDirty = false;
     }
+    this.updateTracts(moved);
+    const wantTracts = this.view.tracts && this.view.notes && this.tractLinks.length > 0;
+    const ta = this.tractMat.uniforms.uAlpha;
+    ta.value = wantTracts ? Math.min(1, ta.value + dt * 2.5) : Math.max(0, ta.value - dt * 4);
+    this.tractMat.uniforms.uTime.value = t;
+    this.tractMat.uniforms.uSpread.value = 0.045 * (1 - this.formCur) + 0.03 * this.formCur;
+    if (this.tractPts) this.tractPts.visible = ta.value > 0.001;
     this.revealCur = Math.min(1.2, this.revealCur + dt * 0.42);
     this.hasLitCur = ease(this.hasLitCur, this.hasLitTarget, dt, 6);
 

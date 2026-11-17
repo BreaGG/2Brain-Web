@@ -33,6 +33,7 @@ export interface Settings {
   turning: boolean;
   speed: number; // percent
   links: boolean;
+  tracts: boolean;
   outline: boolean;
   outlineOpacity: number; // percent
   pointSize: number; // percent
@@ -66,6 +67,7 @@ export const DEFAULT_SETTINGS: Settings = {
   turning: true,
   speed: 100,
   links: true,
+  tracts: true,
   outline: true,
   outlineOpacity: 100,
   pointSize: 100,
