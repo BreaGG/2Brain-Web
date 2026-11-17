@@ -80,6 +80,34 @@ export default function Navigator({ accent, onClose }: PaneProps) {
   return (
     <>
       <PaneHead title="Navigator" accent={accent} onClose={onClose} />
+      {/* phones: folders and types as a row of chips instead of a column */}
+      <div className="nav-chips" role="group" aria-label="Folders and types">
+        <button type="button" aria-pressed={folder == null && type == null} onClick={() => { pickFolder(null); setType(null); }}>
+          All · {total}
+        </button>
+        {fg.list.map((g, gi) => (
+          <button key={g.key} type="button" aria-pressed={folder === gi} onClick={() => pickFolder(folder === gi ? null : gi)}>
+            <Dot c={folderColors[gi]} hollow={g.unsorted} />
+            {g.label} · {g.notes}
+          </button>
+        ))}
+        {types.map(([t, c]) => (
+          <button
+            key={t}
+            type="button"
+            className="type"
+            aria-pressed={type === t}
+            onClick={() => {
+              const next = type === t ? null : t;
+              setType(next);
+              if (next) lightSet(model.notes.filter((n) => n.type === next).map((n) => n.i), typeLabel(next), "navigator");
+              else setFocus({ kind: "none" });
+            }}
+          >
+            {typeLabel(t)} · {c}
+          </button>
+        ))}
+      </div>
       <div className="nav-split">
         <div className="nav-col">
           <ColHead label="Folders" open={open.folders} onToggle={() => setOpen((o) => ({ ...o, folders: !o.folders }))} />

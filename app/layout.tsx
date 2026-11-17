@@ -10,11 +10,14 @@ const plexMono = IBM_Plex_Mono({ variable: "--font-plex-mono", subsets: ["latin"
 export const metadata: Metadata = {
   title: "2Brain",
   description: "A second brain you can see: every note in the head, every passage down the spine.",
+  appleWebApp: { capable: true, title: "2Brain", statusBarStyle: "black-translucent" },
+  icons: { apple: "/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  viewportFit: "cover",
   themeColor: "#000000",
 };
 
