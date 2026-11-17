@@ -4,6 +4,7 @@ import type { AnswerKey, AxisKey, FormKey, SizeKey } from "./table";
 
 export type LabelMode = "lit" | "all" | "none";
 export type LabelSize = "auto" | "small" | "large";
+export type GroupLayout = "spheres" | "tree";
 
 export interface Settings {
   theme: ThemeId;
@@ -24,6 +25,7 @@ export interface Settings {
   record: boolean;
   ghosts: boolean;
   groupBy: GroupBy;
+  groupLayout: GroupLayout;
   split: boolean;
   labels: LabelMode;
   labelSize: LabelSize;
@@ -56,6 +58,7 @@ export const DEFAULT_SETTINGS: Settings = {
   record: true,
   ghosts: false,
   groupBy: "folder",
+  groupLayout: "spheres",
   split: false,
   labels: "lit",
   labelSize: "auto",
