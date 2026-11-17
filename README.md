@@ -1,6 +1,6 @@
 # 2Brain
 
-A second brain you can see. Every page of the wiki is a point in the head; every passage of every page runs down the spine and out along the nerves, in the order it was written. Links between pages are drawn as lines.
+A second brain you can see. Every page of the wiki is a point on the cortex of a real brain; every passage of every page runs from the brainstem down the spinal cord and out along the nerves, in the order it was written. Links between pages are drawn as lines.
 
 ## The interface (v2)
 
@@ -13,6 +13,10 @@ A second brain you can see. Every page of the wiki is a point in the head; every
 - **Reader**: opening a note shows it beside the brain and lights it and its neighbours. Its URL is `/wiki/<folder>/<slug>`.
 
 The previous interface is kept untouched in [`_backup/ui-v1/`](_backup/ui-v1/README.md).
+
+## Anatomy credit
+
+The brain and the nervous system are drawn on real anatomy: [`public/anatomy/atlas.bin`](public/anatomy/ATTRIBUTION.md) holds 20,000 points on a human brain and 25,211 points on the brainstem, spinal cord and nerves. They come from [Z-Anatomy](https://github.com/Z-Anatomy/Models-of-human-anatomy) (CC BY-SA 4.0), built on BodyParts3D © The Database Center for Life Science (CC BY-SA 2.1 Japan), with point layouts derived by [mindcorpus](https://mindcorpus.org) (CC BY-SA 4.0). That file stays under CC BY-SA 4.0; see [`public/anatomy/ATTRIBUTION.md`](public/anatomy/ATTRIBUTION.md).
 
 ## Data
 

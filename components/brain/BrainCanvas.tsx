@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Model, GroupBy } from "@/lib/brain";
 import type { Settings } from "@/lib/settings";
-import { buildAnatomy, buildGrouped } from "./anatomy";
+import { buildAnatomy, buildGrouped, loadAtlas, type Atlas } from "./anatomy";
 import { BrainScene, type SceneLabel } from "./scene";
 
 export interface BrainCanvasProps {
@@ -34,15 +34,29 @@ export default function BrainCanvas(p: BrainCanvasProps) {
     cbs.current = { onHover: p.onHover, onPick: p.onPick, onClear: p.onClear };
   });
 
-  const maxRecord = useMemo(() => {
-    if (typeof window === "undefined") return 30000;
-    const small = window.innerWidth < 860;
+  const small = useMemo(() => {
+    if (typeof window === "undefined") return false;
     const mem = (navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8;
-    return small || mem < 4 ? 16000 : 42000;
+    return window.innerWidth < 860 || mem < 4;
   }, []);
 
-  const anat = useMemo(() => buildAnatomy(p.model, maxRecord), [p.model, maxRecord]);
-  const grouped = useMemo(() => buildGrouped(p.model, p.groupBy, anat), [p.model, p.groupBy, anat]);
+  const [atlas, setAtlas] = useState<Atlas | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let live = true;
+    loadAtlas()
+      .then((a) => live && setAtlas(a))
+      .catch((e) => {
+        console.error("[2brain] anatomy could not be loaded", e);
+        if (live) setFailed(true);
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  const anat = useMemo(() => (atlas ? buildAnatomy(p.model, atlas, { small }) : null), [p.model, atlas, small]);
+  const grouped = useMemo(() => (anat ? buildGrouped(p.model, p.groupBy, anat) : null), [p.model, p.groupBy, anat]);
 
   // mount
   useEffect(() => {
@@ -68,11 +82,11 @@ export default function BrainCanvas(p: BrainCanvasProps) {
 
   const s = sceneRef;
   useEffect(() => {
-    s.current?.setAnatomy(anat, p.model.links, p.model.ghostSlugs);
+    if (anat) s.current?.setAnatomy(anat, p.model.links, p.model.ghostSlugs);
   }, [anat, p.model, s]);
 
   useEffect(() => {
-    s.current?.setGrouped(grouped, p.groupOf, p.groupCount);
+    if (grouped) s.current?.setGrouped(grouped, p.groupOf, p.groupCount);
   }, [grouped, p.groupOf, p.groupCount, s, anat]);
 
   useEffect(() => {
@@ -114,6 +128,7 @@ export default function BrainCanvas(p: BrainCanvasProps) {
 
   const zoomed = useRef(false);
   useEffect(() => {
+    if (!anat) return;
     if (p.focusNote != null) {
       s.current?.focusNote(p.focusNote);
       zoomed.current = true;
@@ -121,7 +136,7 @@ export default function BrainCanvas(p: BrainCanvasProps) {
       s.current?.home();
       zoomed.current = false;
     }
-  }, [p.focusNote, s]);
+  }, [p.focusNote, s, anat]);
 
   useEffect(() => {
     if (p.resetKey) s.current?.resetCamera();
@@ -130,6 +145,7 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   return (
     <div className="brain-host" data-knowledge-graph="">
       <div ref={host} className="brain-host" />
+      {!anat && <div className="brain-loading label">{failed ? "The anatomy could not be loaded" : "Drawing your brain…"}</div>}
       <div ref={labelHost} className="brain-labels" />
     </div>
   );

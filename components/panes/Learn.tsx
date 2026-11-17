@@ -19,7 +19,7 @@ function Glyph({ children }: { children: ReactNode }) {
 const ITEMS: { title: string; text: string; glyph: ReactNode }[] = [
   {
     title: "The brain holds your notes",
-    text: "Each point in the head is one page of your wiki: a concept, a person, a source or a synthesis. Bigger clusters are folders you write in most.",
+    text: "The brain is drawn on a real human brain. Each bright point on the cortex is one page of your wiki, and each folder takes its own patch of cortex, sized by how much it holds.",
     glyph: (
       <Glyph>
         {[[6, 10], [10, 7], [15, 6], [20, 8], [24, 11], [8, 15], [13, 13], [18, 14], [22, 16], [12, 18], [17, 19]].map(([x, y], i) => (
@@ -30,8 +30,8 @@ const ITEMS: { title: string; text: string; glyph: ReactNode }[] = [
     ),
   },
   {
-    title: "The brainstem and spine hold your record",
-    text: "Every passage of every note runs down the cord and out along the nerves, in the order it was written: oldest near the head, newest towards the hips.",
+    title: "The brainstem, cord and nerves hold your record",
+    text: "Every passage of every note runs from the brainstem down the spinal cord and out along the nerves of a real body, in the order it was written: the oldest near the brain, the newest at the ends of the nerves.",
     glyph: (
       <Glyph>
         <path d="M15 2C14 8 16 14 15 24" stroke="#fff" strokeOpacity="0.8" strokeDasharray="1 1.6" fill="none" />
@@ -192,6 +192,17 @@ export default function Learn({ accent, onClose }: PaneProps) {
             ))}
           </div>
           {tip != null && <div className="line-tip">{LINES[tip].tip}</div>}
+        </Sect>
+
+        <Sect label="The anatomy" accent={accent}>
+          <p>
+            The brain and the nervous system are drawn on points taken from real anatomy: Z-Anatomy, the libre 3D atlas of anatomy (CC BY-SA 4.0), built on BodyParts3D © The Database Center for Life Science (CC BY-SA 2.1 Japan),
+            with point layouts derived by mindcorpus (CC BY-SA 4.0).{" "}
+            <a className="link" href="/anatomy/ATTRIBUTION.md" target="_blank" rel="noreferrer">
+              Full credit and licence
+            </a>
+            .
+          </p>
         </Sect>
       </div>
     </>
