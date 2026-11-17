@@ -24,8 +24,8 @@ export const KIND_FACE = 5;
 
 export const REGIONS = ["Prefrontal", "Frontal", "Parietal", "Occipital", "Temporal", "Limbic", "Cerebellum", "Brainstem"];
 
-/** What the camera frames: the brain down to the hips. */
-export const FRAME = { top: 1.25, bottom: -9.1, width: 7.4 };
+/** What the camera frames at first: the top of the brain to just above the navel. */
+export const FRAME = { top: 0.95, bottom: -5.6, width: 5.4 };
 export const FRAME_CY = (FRAME.top + FRAME.bottom) / 2;
 export const BRAIN_C = { x: 0, y: -0.12, z: 0 };
 const SPLIT = 0.22;

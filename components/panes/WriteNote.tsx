@@ -3,18 +3,22 @@
 import { useEffect, useMemo, useState, useTransition, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import { useApp, ADD_ACCENT } from "@/components/app/context";
-import { Icon, Select } from "@/components/ui";
+import { Dot, Icon, Select } from "@/components/ui";
+import NoteEditor, { NotePicker, type EditMode, type PickNote } from "./NoteEditor";
 import { writeNote, type WriteResult } from "@/app/actions";
-import { typeLabel } from "@/lib/brain";
+import { singularType, typeLabel } from "@/lib/brain";
 
 const KEY_STORE = "2brain.writeKey";
 
+/** Each kind of note starts with its section headings and room to write under each. */
 export const STARTERS: Record<string, string> = {
-  concept: "## Summary\n\nWhat it is, in two or three sentences.\n\n## Notes\n\n- Where it shows up: [[another-note]]\n",
-  person: "## Who\n\nOne line on who they are.\n\n## Ideas of theirs I use\n\n- [[a-concept]]\n",
-  "source-summary": "## Summary\n\nThe argument in a paragraph.\n\n## Takeaways\n\n- \n",
-  synthesis: "## Claim\n\nWhat you now think, and why.\n\n## Built from\n\n- [[note-one]]\n- [[note-two]]\n",
+  concept: "## Summary\n\n## Notes",
+  person: "## Who\n\n## Ideas of theirs I use",
+  "source-summary": "## Summary\n\n## Takeaways",
+  synthesis: "## Claim\n\n## Built from",
 };
+
+const MODE_STORE = "2brain.editMode";
 
 const PREFIX: Record<string, string> = { concept: "concept", person: "person", "source-summary": "source", synthesis: "synthesis" };
 
@@ -29,7 +33,7 @@ export function slugify(s: string) {
 }
 
 export default function WriteNote() {
-  const { model, writable, repo, usingSample, demo, openNote, setFocus } = useApp();
+  const { model, writable, repo, usingSample, demo, openNote, setFocus, colorOf } = useApp();
   const router = useRouter();
   const [pending, start] = useTransition();
 
@@ -38,7 +42,13 @@ export default function WriteNote() {
     const t = new Set(["concept", "person", "source-summary", "synthesis", ...model.notes.map((n) => n.type).filter((x) => x !== "meta" && x !== "page")]);
     return [...t];
   }, [model]);
-  const sourceSlugs = useMemo(() => model.notes.filter((n) => n.type.startsWith("source")).map((n) => n.id.split("/").pop()!), [model]);
+  const pickNotes = useMemo<PickNote[]>(
+    () =>
+      model.notes
+        .filter((n) => !n.isIndex)
+        .map((n) => ({ slug: n.id, short: n.id.split("/").pop()!, title: n.title, color: colorOf(n.i), kind: singularType(n.type) })),
+    [model, colorOf],
+  );
 
   const [title, setTitle] = useState("");
   const [type, setType] = useState("concept");
@@ -47,9 +57,20 @@ export default function WriteNote() {
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
   const [domains, setDomains] = useState("");
-  const [sources, setSources] = useState("");
+  const [sources, setSources] = useState<PickNote[]>([]);
+  const [picking, setPicking] = useState(false);
   const [body, setBody] = useState(STARTERS.concept);
   const [bodyTouched, setBodyTouched] = useState(false);
+  const [loadKey, setLoadKey] = useState(0);
+  const [mode, setModeState] = useState<EditMode>("normal");
+  const setMode = (m: EditMode) => {
+    setModeState(m);
+    try {
+      localStorage.setItem(MODE_STORE, m);
+    } catch {
+      /* per-device preference only */
+    }
+  };
   const [key, setKey] = useState("");
   const [remember, setRemember] = useState(true);
   const [hasStoredKey, setHasStoredKey] = useState(false);
@@ -58,6 +79,7 @@ export default function WriteNote() {
 
   useEffect(() => {
     try {
+      if (localStorage.getItem(MODE_STORE) === "markdown") setModeState("markdown");
       const k = localStorage.getItem(KEY_STORE);
       if (k) {
         setKey(k);
@@ -108,7 +130,7 @@ export default function WriteNote() {
       folder: realFolder,
       slug: fileSlug,
       domains: (domains || realFolder.split("/")[0]).split(/[,/]/).map((d) => d.trim()).filter(Boolean),
-      sources: sources.split(/[,\s]+/).map((s) => s.trim().replace(/^\[\[|\]\]$/g, "")).filter(Boolean),
+      sources: sources.map((s) => s.short),
       body,
     };
     start(async () => {
@@ -127,7 +149,8 @@ export default function WriteNote() {
         setSlugTouched(false);
         setBodyTouched(false);
         setBody(STARTERS[type] ?? "");
-        setSources("");
+        setLoadKey((k) => k + 1);
+        setSources([]);
         router.refresh();
       } else if (res.code === "bad-key") {
         try {
@@ -165,7 +188,10 @@ export default function WriteNote() {
             options={types.map((t) => ({ value: t, label: typeLabel(t).replace(/s$/, "") }))}
             onChange={(t) => {
               setType(t);
-              if (!bodyTouched) setBody(STARTERS[t] ?? "");
+              if (!bodyTouched) {
+                setBody(STARTERS[t] ?? "");
+                setLoadKey((k) => k + 1);
+              }
             }}
           />
         </label>
@@ -181,53 +207,77 @@ export default function WriteNote() {
         </label>
       )}
 
-      <label className="write-field">
-        <span className="label">File</span>
-        <span className="write-path">
-          <span>wiki/{realFolder || "…"}/</span>
-          <input
-            value={fileSlug}
-            onChange={(e) => {
-              setSlugTouched(true);
-              setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"));
+      <div className="write-field">
+        <span className="label">Sources · the notes this one draws on</span>
+        <div className="chips">
+          {sources.map((src) => (
+            <span key={src.slug} className="chip">
+              <Dot c={src.color} />
+              {src.title}
+              <button type="button" aria-label={`Remove ${src.title}`} onClick={() => setSources((l) => l.filter((x) => x.slug !== src.slug))}>
+                <Icon name="close" size={9} />
+              </button>
+            </span>
+          ))}
+          <button type="button" className="chip add" aria-expanded={picking} onClick={() => setPicking((p) => !p)}>
+            <Icon name="plus" size={10} /> Add a source
+          </button>
+        </div>
+        {picking && (
+          <NotePicker
+            notes={pickNotes.filter((n) => !sources.some((x) => x.slug === n.slug))}
+            prefer={(n) => n.kind === "Source"}
+            placeholder="Find the book, paper or note it draws on"
+            onClose={() => setPicking(false)}
+            onPick={(n) => {
+              setSources((l) => [...l, n]);
+              setPicking(false);
             }}
-            aria-label="File name"
-            placeholder="file-name"
           />
-          <span>.md</span>
-        </span>
-        {taken && <small className="write-warn">A note with this file name already exists in {realFolder}.</small>}
-      </label>
+        )}
+      </div>
 
-      <div className="write-row">
+      <div className="write-field">
+        <NoteEditor
+          value={body}
+          loadKey={loadKey}
+          mode={mode}
+          onMode={setMode}
+          notes={pickNotes}
+          onChange={(md) => {
+            setBodyTouched(true);
+            setBody(md);
+          }}
+        />
+      </div>
+
+      <details className="write-more" open={taken || undefined}>
+        <summary>
+          More details <span>file name and domain</span>
+          <Icon name="chev" size={11} />
+        </summary>
+        <label className="write-field">
+          <span className="label">File</span>
+          <span className="write-path">
+            <span>wiki/{realFolder || "…"}/</span>
+            <input
+              value={fileSlug}
+              onChange={(e) => {
+                setSlugTouched(true);
+                setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"));
+              }}
+              aria-label="File name"
+              placeholder="file-name"
+            />
+            <span>.md</span>
+          </span>
+        </label>
         <label className="write-field">
           <span className="label">Domain</span>
           <input className="field-input" value={domains} onChange={(e) => setDomains(e.target.value)} placeholder={realFolder.split("/")[0] || "research"} />
         </label>
-        <label className="write-field">
-          <span className="label">Sources</span>
-          <input className="field-input" list="write-sources" value={sources} onChange={(e) => setSources(e.target.value)} placeholder="source-…, source-…" />
-          <datalist id="write-sources">
-            {sourceSlugs.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
-        </label>
-      </div>
-
-      <label className="write-field">
-        <span className="label">Note · Markdown, [[links]] to other notes</span>
-        <textarea
-          className="write-body"
-          value={body}
-          onChange={(e) => {
-            setBodyTouched(true);
-            setBody(e.target.value);
-          }}
-          rows={12}
-          spellCheck
-        />
-      </label>
+      </details>
+      {taken && <small className="write-warn">A note called “{fileSlug}” already exists in {realFolder}. Change the title or the file name.</small>}
 
       {!hasStoredKey && (
         <div className="write-row">

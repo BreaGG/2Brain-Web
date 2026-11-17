@@ -16,7 +16,7 @@ import StageOverlay from "./StageOverlay";
 import CommandBar from "./CommandBar";
 import Panes from "./Panes";
 import Walkthrough from "./Walkthrough";
-import { Icon, Wordmark } from "@/components/ui";
+import { BrainMark, Icon, Wordmark } from "@/components/ui";
 
 const BrainCanvas = dynamic(() => import("@/components/brain/BrainCanvas"), {
   ssr: false,
@@ -132,7 +132,8 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
       setPane(p);
       setNoteIdx(null);
       clearNoteFocus();
-      syncUrl(`/#${p}`, pane === "note");
+      // opening a pane from the brain is a step back can undo (the phone's back gesture)
+      syncUrl(`/#${p}`, pane === "note" || pane == null);
     },
     [pane, prevPane, syncUrl],
   );
@@ -188,6 +189,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
     setFocusState(ids.length ? { kind: "set", ids, label, source } : { kind: "none" });
   }, []);
   const openCommand = useCallback((q = "") => setCmd({ open: true, q }), []);
+  const closeCmd = () => setCmd((c) => (c.open ? { open: false, q: "" } : c));
 
   // initial hash → pane; back/forward → note
   useEffect(() => {
@@ -358,18 +360,42 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
     <AppCtx.Provider value={api}>
       <div className="app" style={{ "--ground": settings.ground / 100 } as CSSProperties}>
         <header className="mobile-bar">
-          <button type="button" onClick={() => openPane(null)} aria-label="2brain, back to the brain">
+          <button type="button" onClick={() => { openPane(null); setFocusState({ kind: "none" }); }} aria-label="2brain, back to the brain">
             <Wordmark />
           </button>
           <div className="acts">
-            <button type="button" className="icon-button boxed" aria-label="Search" onClick={() => openCommand()}>
-              <Icon name="search" size={12} />
+            <button
+              type="button"
+              className="icon-button boxed"
+              aria-pressed={settings.focusBrain}
+              aria-label="Focus brain"
+              onClick={() => set("focusBrain", !settings.focusBrain)}
+            >
+              <BrainMark size={13} />
             </button>
-            <button type="button" className="icon-button boxed" aria-expanded={railOpen} aria-label="Menu" onClick={() => setRailOpen((v) => !v)}>
-              <Icon name="menu" size={12} />
+            <button type="button" className="icon-button boxed" aria-expanded={vizOpen} aria-label="View settings" onClick={() => { setRailOpen(false); setVizOpen((v) => !v); }}>
+              <Icon name="sliders" size={12} />
             </button>
           </div>
         </header>
+
+        <nav className="tabbar" aria-label="Sections">
+          {/* closing search first lets any tab take you straight where it says */}
+          {(
+            [
+              { id: "brain", label: "Brain", icon: <BrainMark size={18} />, on: pane == null && !railOpen, go: () => { closeCmd(); openPane(null); setFocusState({ kind: "none" }); setVizOpen(false); } },
+              { id: "notes", label: "Notes", icon: <Icon name="doc" size={17} />, on: (pane === "navigator" || pane === "note") && !railOpen, go: () => { closeCmd(); setVizOpen(false); openPane("navigator"); } },
+              { id: "search", label: "Search", icon: <Icon name="search" size={17} />, on: cmd.open, go: () => { setRailOpen(false); setVizOpen(false); if (cmd.open) closeCmd(); else openCommand(); } },
+              { id: "add", label: "Add", icon: <Icon name="plus" size={17} />, on: pane === "add" && !railOpen, go: () => { closeCmd(); setVizOpen(false); openPane("add"); } },
+              { id: "more", label: "More", icon: <Icon name="menu" size={17} />, on: railOpen || (!!pane && !["navigator", "note", "add"].includes(pane)), go: () => { closeCmd(); setVizOpen(false); setRailOpen((v) => !v); } },
+            ] as const
+          ).map((t) => (
+            <button key={t.id} type="button" aria-current={t.on} onClick={t.go}>
+              {t.icon}
+              <span>{t.label}</span>
+            </button>
+          ))}
+        </nav>
 
         <Rail open={railOpen} onHome={() => { openPane(null); setFocusState({ kind: "none" }); setResetKey((k) => k + 1); }} />
 
@@ -393,6 +419,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
             sizeK={sizeK}
             noteLit={noteLit}
             recLit={recLit}
+            core={focus.kind === "note" && model.notes[focus.i]?.id === "index"}
             hidden={hidden}
             labels={labels}
             selected={selected}
