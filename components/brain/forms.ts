@@ -1,7 +1,7 @@
 import type { Grouping, Model } from "@/lib/brain";
 import { monthLabel, monthRange, monthKey } from "@/lib/brain";
 import { squarify } from "@/lib/squarify";
-import { OWN_TYPES, WEEKDAYS, weekdayOf, type AnswerKey, type AxisKey, type FormKey } from "@/lib/table";
+import { OWN_TYPES, WEEKDAYS, axisOf, weekdayOf, type AnswerKey, type AxisKey, type FormKey } from "@/lib/table";
 import { FRAME_CY, rng, type Anatomy, type Layout, type LayoutLabel } from "./anatomy";
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -29,69 +29,6 @@ const DAY = 86400000;
 
 type Vec = [number, number, number];
 type Place = (note: number, isNote: boolean) => Vec;
-
-interface Axis {
-  labels: string[];
-  of: Int32Array;
-}
-
-/* ── axes ─────────────────────────────────────────────────────────────────── */
-
-function axisOf(model: Model, key: AxisKey): Axis {
-  const n = model.notes.length;
-  const of = new Int32Array(n);
-  const withUndated = (labels: string[], idx: (t: number) => number): Axis => {
-    let undated = false;
-    model.notes.forEach((x, i) => {
-      if (x.date == null) {
-        of[i] = -1;
-        undated = true;
-      } else of[i] = idx(x.date);
-    });
-    if (undated) {
-      const u = labels.length;
-      for (let i = 0; i < n; i++) if (of[i] < 0) of[i] = u;
-      labels = [...labels, "Undated"];
-    }
-    return { labels, of };
-  };
-  const fromGrouping = (g: Grouping): Axis => ({ labels: g.list.map((x) => x.label), of: g.of });
-  const buckets = (edges: number[], names: string[], v: (i: number) => number): Axis => {
-    for (let i = 0; i < n; i++) {
-      const x = v(i);
-      let b = 0;
-      while (b < edges.length && x >= edges[b]) b++;
-      of[i] = b;
-    }
-    return { labels: names, of };
-  };
-  switch (key) {
-    case "month": {
-      const months = monthRange(model);
-      const at = new Map(months.map((m, k) => [m, k]));
-      return withUndated(months.map((m) => monthLabel(m)), (t) => at.get(monthKey(t)) ?? 0);
-    }
-    case "year": {
-      const ys = [...new Set(model.notes.filter((x) => x.date != null).map((x) => new Date(x.date!).getUTCFullYear()))].sort();
-      const at = new Map(ys.map((y, k) => [y, k]));
-      return withUndated(ys.map(String), (t) => at.get(new Date(t).getUTCFullYear()) ?? 0);
-    }
-    case "weekday":
-      return withUndated(WEEKDAYS.slice(), weekdayOf);
-    case "folder":
-      return fromGrouping(model.groups.folder);
-    case "domain":
-      return fromGrouping(model.groups.domain);
-    case "type":
-      return fromGrouping(model.groups.type);
-    case "links":
-      return buckets([1, 3, 6, 11], ["No links", "1–2", "3–5", "6–10", "11 or more"], (i) => model.notes[i].in.length + model.notes[i].out.length);
-    case "length":
-      return buckets([100, 300, 1000], ["Under 100 words", "100–300", "300–1,000", "Over 1,000"], (i) => model.notes[i].words);
-    case "none":
-      return { labels: ["All"], of };
-  }
-}
 
 /* ── helpers ──────────────────────────────────────────────────────────────── */
 
@@ -191,7 +128,9 @@ export function buildForm(model: Model, anat: Anatomy, spec: FormSpec): Layout {
     return () => [cx + gauss(r) * 0.16, cy + gauss(r) * 0.16, gauss(r) * 0.08];
   };
 
-  const key = spec.answer ? `answer:${spec.answer}:${spec.grouping.list.length}` : `form:${spec.form}:${spec.across}:${spec.down}:${spec.counts}`;
+  const key = spec.answer
+    ? `answer:${spec.answer}:${spec.grouping.list.length}${spec.answer === "flow" ? `:${spec.across}:${spec.down}:${spec.counts}` : ""}`
+    : `form:${spec.form}:${spec.across}:${spec.down}:${spec.counts}`;
 
   if (spec.answer) {
     place = answerPlace(model, spec, r, b, weight, undatedPile);
@@ -433,6 +372,109 @@ function answerPlace(
   };
 
   switch (spec.answer) {
+    case "flow": {
+      // two stacked columns, Across on the left and Down on the right, joined by a band
+      // for every pair that shares notes; the record runs along the bands
+      const A = axisOf(model, spec.across);
+      const D = axisOf(model, spec.down);
+      const na = A.labels.length;
+      const nd = D.labels.length;
+      const w = new Float32Array(na * nd);
+      const notesIn = new Int32Array(na * nd);
+      notes.forEach((_, i) => {
+        w[A.of[i] * nd + D.of[i]] += weight(i);
+        notesIn[A.of[i] * nd + D.of[i]]++;
+      });
+      const left = new Float32Array(na);
+      const right = new Float32Array(nd);
+      for (let a = 0; a < na; a++) for (let d = 0; d < nd; d++) {
+        left[a] += w[a * nd + d];
+        right[d] += w[a * nd + d];
+      }
+      const gap = 0.07;
+      const stack = (v: Float32Array) => {
+        const n = v.length;
+        const room = H * 0.96 - gap * Math.max(0, n - 1);
+        const sum = v.reduce((x, y) => x + y, 0) || 1;
+        let at = CY + H * 0.48;
+        return Array.from(v, (x) => {
+          const h = (room * x) / sum;
+          const out: [number, number] = [at, at - h];
+          at -= h + (x > 0 ? gap : 0);
+          return out;
+        });
+      };
+      const L = stack(left);
+      const R = stack(right);
+      const bar = 0.12;
+      const xl = X0 + 0.9;
+      const xr = X0 + W - 0.9;
+      // each band's slice of the left and right bars, in order
+      const atL = L.map((s) => s[0]);
+      const atR = R.map((s) => s[0]);
+      const kL = Array.from(left, (x, a) => (x ? (L[a][0] - L[a][1]) / x : 0));
+      const kR = Array.from(right, (x, d) => (x ? (R[d][0] - R[d][1]) / x : 0));
+      const bandL = new Float32Array(na * nd * 2);
+      const bandR = new Float32Array(na * nd * 2);
+      for (let a = 0; a < na; a++) for (let d = 0; d < nd; d++) {
+        const c = a * nd + d;
+        if (!w[c]) continue;
+        bandL[c * 2] = atL[a];
+        bandL[c * 2 + 1] = atL[a] - w[c] * kL[a];
+        atL[a] -= w[c] * kL[a];
+      }
+      for (let d = 0; d < nd; d++) for (let a = 0; a < na; a++) {
+        const c = a * nd + d;
+        if (!w[c]) continue;
+        bandR[c * 2] = atR[d];
+        bandR[c * 2 + 1] = atR[d] - w[c] * kR[d];
+        atR[d] -= w[c] * kR[d];
+      }
+      const ease = (t: number) => t * t * (3 - 2 * t);
+      const xa = xl + bar;
+      const xb = xr - bar;
+      const edge = (c: number, which: 0 | 1, t: number) => bandL[c * 2 + which] + (bandR[c * 2 + which] - bandL[c * 2 + which]) * ease(t);
+
+      // bars, band outlines and labels
+      L.forEach(([t0, t1], a) => {
+        if (t0 === t1) return;
+        b.rect(xl, t0, xl + bar, t1);
+        b.label(spec.counts ? `${A.labels[a]} · ${Array.from({ length: nd }, (_, d) => notesIn[a * nd + d]).reduce((x, y) => x + y, 0)}` : A.labels[a], xl - 0.1, (t0 + t1) / 2, "axisL");
+      });
+      R.forEach(([t0, t1], d) => {
+        if (t0 === t1) return;
+        b.rect(xr - bar, t0, xr, t1);
+        b.label(spec.counts ? `${D.labels[d]} · ${Array.from({ length: na }, (_, a) => notesIn[a * nd + d]).reduce((x, y) => x + y, 0)}` : D.labels[d], xr + 0.1, (t0 + t1) / 2, "axis");
+      });
+      for (let c = 0; c < na * nd; c++) {
+        if (!w[c]) continue;
+        const steps = 16;
+        for (const which of [0, 1] as const) {
+          for (let k = 0; k < steps; k++) {
+            const t0 = k / steps;
+            const t1 = (k + 1) / steps;
+            b.line([xa + (xb - xa) * t0, edge(c, which, t0), 0], [xa + (xb - xa) * t1, edge(c, which, t1), 0]);
+          }
+        }
+      }
+      return (i, isNote) => {
+        const c = A.of[i] * nd + D.of[i];
+        if (!w[c]) return [0, CY, 0];
+        // a few points sit in the bars at either end; the rest run along the band
+        const u = r();
+        if (!isNote && u < 0.08) {
+          const lft = u < 0.04;
+          const top = lft ? bandL[c * 2] : bandR[c * 2];
+          const foot = lft ? bandL[c * 2 + 1] : bandR[c * 2 + 1];
+          return [(lft ? xl : xr - bar) + r() * bar, foot + r() * (top - foot), (r() - 0.5) * 0.04];
+        }
+        const t = isNote ? 0.5 + (r() - 0.5) * 0.3 : 0.02 + 0.96 * r();
+        const s = isNote ? 0.5 : 0.08 + 0.84 * r();
+        const top = edge(c, 0, t);
+        const foot = edge(c, 1, t);
+        return [xa + (xb - xa) * t, top + (foot - top) * s, (r() - 0.5) * 0.05];
+      };
+    }
     case "stream": {
       const s = series((i) => g.of[i], 0.9);
       const tot = new Array(T.M).fill(0).map((_, m) => s.reduce((a, v) => a + v[m], 0));

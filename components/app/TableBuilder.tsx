@@ -23,15 +23,25 @@ export default function TableBuilder() {
   }, [model]);
 
   const answer = ANSWERS.find((a) => a.value === s.tbAnswer);
-  const said = useMemo(() => (s.tbAnswer ? insight(model, s.tbAnswer, grouping) : ""), [model, s.tbAnswer, grouping]);
-  const timeAxis = !!s.tbAnswer || s.tbAcross === "month" || s.tbDown === "month" || s.tbAcross === "year" || s.tbDown === "year";
+  const said = useMemo(
+    () => (s.tbAnswer ? insight(model, s.tbAnswer, grouping, { across: s.tbAcross, down: s.tbDown }) : ""),
+    [model, s.tbAnswer, grouping, s.tbAcross, s.tbDown],
+  );
+  const timeAxis = (!!s.tbAnswer && s.tbAnswer !== "flow") || s.tbAcross === "month" || s.tbDown === "month" || s.tbAcross === "year" || s.tbDown === "year";
   const colour: Colour = s.tbMono ? "none" : s.groupBy;
 
   const pickForm = (f: FormKey) => {
     set("tbForm", f);
     set("tbAnswer", "");
   };
-  const pickAnswer = (a: AnswerKey) => set("tbAnswer", s.tbAnswer === a ? "" : a);
+  const pickAnswer = (a: AnswerKey) => {
+    // flow reads best between two kinds of thing; start it on folder → type
+    if (a === "flow" && s.tbAnswer !== "flow" && (s.tbAcross === "month" || s.tbAcross === "year" || s.tbAcross === s.tbDown)) {
+      set("tbAcross", "folder");
+      set("tbDown", s.tbDown === "folder" || s.tbDown === "month" || s.tbDown === "year" ? "type" : s.tbDown);
+    }
+    set("tbAnswer", s.tbAnswer === a ? "" : a);
+  };
 
   return (
     <aside className="tb" aria-label="Table builder">
@@ -54,7 +64,7 @@ export default function TableBuilder() {
         <div className="tb-scroll">
           <section className="viz-section">
             <div className="label">Axes</div>
-            {s.tbAnswer ? (
+            {s.tbAnswer && s.tbAnswer !== "flow" ? (
               <p className="tb-note">Set by the answer. Choose a form to set them yourself.</p>
             ) : (
               <>

@@ -1146,7 +1146,8 @@ export class BrainScene {
     this.fibreMat.uniforms.uOpacity.value = 0.2 * (1 - this.formCur) * (1 - this.hasLitCur * 0.3) * this.bodyCur;
     if (this.fibres) this.fibres.visible = this.bodyCur > 0.01 && this.formCur < 0.98;
     // charts keep links faint; the tree hides them until something is lit
-    const quiet = this.layout?.key.startsWith("tree") ? 0.95 * (1 - this.hasLitCur) : 0.6;
+    const k = this.layout?.key ?? "";
+    const quiet = k.startsWith("tree") || k.startsWith("answer:flow") ? 0.95 * (1 - this.hasLitCur) : 0.6;
     const chartK = this.layout?.flat ? 1 - quiet * this.formCur : 1;
     this.linesMat.uniforms.uOpacity.value = (0.1 + 0.08 * this.formCur) * (1 + this.hasLitCur * 1.4) * chartK;
     this.scaffoldMat.uniforms.uOpacity.value = 0.42 * Math.max(0, this.formCur - 0.4) / 0.6 * Math.min(1, this.morphCur * 1.5);
