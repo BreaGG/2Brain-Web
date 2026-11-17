@@ -10,6 +10,7 @@ export interface Settings {
   palette: PaletteId;
   form: number; // 0 = anatomy, 1 = layout
   tableBuilder: boolean;
+  focusBrain: boolean;
   notes: boolean;
   record: boolean;
   ghosts: boolean;
@@ -33,6 +34,7 @@ export const DEFAULT_SETTINGS: Settings = {
   palette: "default",
   form: 0,
   tableBuilder: false,
+  focusBrain: false,
   notes: true,
   record: true,
   ghosts: false,

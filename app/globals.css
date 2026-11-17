@@ -1520,6 +1520,7 @@ button.row:hover .grow {
 .tbl td small {
   color: var(--dim);
   font-size: 11px;
+  overflow-wrap: anywhere;
 }
 .cell-heat {
   text-align: center !important;
@@ -1648,6 +1649,38 @@ button.row:hover .grow {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+.reader-sources {
+  margin: 0 0 22px;
+  padding: 10px 0 4px;
+  border-top: 1px solid var(--hair);
+  border-bottom: 1px solid var(--hair);
+}
+.reader-sources > .label {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--dim);
+}
+.reader-sources .row {
+  min-height: 30px;
+  padding: 5px 0;
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.row.wrap {
+  align-items: flex-start;
+}
+.row.wrap .dot {
+  margin-top: 5px;
+}
+.row.wrap .grow {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  overflow-wrap: anywhere;
+}
+.row.wrap .count {
+  margin-top: 2px;
 }
 .prose {
   font-size: var(--t3);

@@ -78,22 +78,26 @@ export default function Reader({ onClose }: PaneProps) {
         </div>
 
         {page.sources.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 18, fontSize: 12 }}>
-            <span className="label" style={{ alignSelf: "center", marginRight: 4 }}>
-              Sources
-            </span>
-            {page.sources.map((s) => {
-              const j = resolve(s);
-              return j != null ? (
-                <button key={s} type="button" className="btn" style={{ height: 24, padding: "0 8px" }} onClick={() => openNote(j)}>
-                  {model.notes[j].title}
-                </button>
-              ) : (
-                <span key={s} className="btn" style={{ height: 24, padding: "0 8px", borderStyle: "dashed", color: "var(--dim)" }}>
-                  {s}
-                </span>
-              );
-            })}
+          <div className="reader-sources">
+            <span className="label">Sources · {page.sources.length}</span>
+            <div className="rows">
+              {page.sources.map((s) => {
+                const j = resolve(s);
+                return j != null ? (
+                  <button key={s} type="button" className="row wrap" onClick={() => openNote(j)} title={model.notes[j].id}>
+                    <Dot c={colorOf(j)} />
+                    <span className="grow">{model.notes[j].title}</span>
+                    <span className="count">{singularType(model.notes[j].type)}</span>
+                  </button>
+                ) : (
+                  <div key={s} className="row wrap" style={{ color: "var(--dim)" }} title="Not written yet">
+                    <Dot c="transparent" hollow />
+                    <span className="grow">{s}</span>
+                    <span className="count">Not written</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

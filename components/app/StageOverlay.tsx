@@ -3,7 +3,7 @@
 import Fuse from "fuse.js";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useApp } from "./context";
-import { Dot, Icon } from "@/components/ui";
+import { BrainMark, Dot, Icon } from "@/components/ui";
 import ViewPanel from "./ViewPanel";
 import TableBuilder from "./TableBuilder";
 import { GROUP_BY_LABEL, fmtDate, fmtInt, monthKey, monthLabel, monthRange, monthStart, singularType } from "@/lib/brain";
@@ -24,6 +24,16 @@ export default function StageOverlay({
         <StageFind />
         <FocusChip />
         <div className="stage-tools">
+          <button
+            type="button"
+            className="icon-button boxed"
+            aria-pressed={settings.focusBrain}
+            title={settings.focusBrain ? "Show the whole body (B)" : "Focus brain: the brain alone (B)"}
+            aria-label="Focus brain"
+            onClick={() => set("focusBrain", !settings.focusBrain)}
+          >
+            <BrainMark size={13} />
+          </button>
           <button
             type="button"
             className="icon-button boxed"

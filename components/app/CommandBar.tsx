@@ -62,6 +62,7 @@ export default function CommandBar({
     views.push({ id: "view-add", group: "Views", title: "Add a note", sub: "How to bring something new into the record", hint: "View", run: () => openPane("add") });
     const toggles: Item[] = [
       { id: "t-form", group: "Commands", title: settings.form > 0.5 ? "Show the anatomy" : "Show the layout", sub: "Slide Form between anatomy and clusters", run: () => set("form", settings.form > 0.5 ? 0 : 1) },
+      { id: "t-focus", group: "Commands", title: settings.focusBrain ? "Show the whole body" : "Focus the brain", sub: "The brain alone, without the cord and nerves", hint: "B", run: () => set("focusBrain", !settings.focusBrain) },
       { id: "t-turn", group: "Commands", title: settings.turning ? "Stop turning" : "Start turning", run: () => set("turning", !settings.turning) },
       { id: "t-links", group: "Commands", title: settings.links ? "Hide links" : "Show links", run: () => set("links", !settings.links) },
       { id: "t-ghost", group: "Commands", title: settings.ghosts ? "Hide ghost links" : "Show ghost links", sub: `${model.ghostSlugs.length} pages linked but not written yet`, run: () => set("ghosts", !settings.ghosts) },

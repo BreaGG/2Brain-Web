@@ -56,6 +56,7 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
             <Range label="Form, from anatomy to layout" min={0} max={100} value={Math.round(s.form * 100)} onChange={(v) => set("form", v / 100)} />
             <span>Layout</span>
           </div>
+          <SwitchRow label="Focus brain" on={s.focusBrain} onChange={(v) => set("focusBrain", v)} />
           <SwitchRow label="Table builder" on={s.tableBuilder} onChange={(v) => set("tableBuilder", v)} />
           <SwitchRow label="Notes" on={s.notes} onChange={(v) => set("notes", v)} />
           <SwitchRow label="Record" on={s.record} onChange={(v) => set("record", v)} />
