@@ -5,6 +5,7 @@ import type { Model, GroupBy } from "@/lib/brain";
 import type { Settings } from "@/lib/settings";
 import { buildAnatomy, buildGrouped, loadAtlas, type Atlas } from "./anatomy";
 import { buildForm, type FormSpec } from "./forms";
+import { buildTree } from "./tree";
 import { BrainScene, type SceneLabel } from "./scene";
 
 export interface BrainCanvasProps {
@@ -61,8 +62,15 @@ export default function BrainCanvas(p: BrainCanvasProps) {
 
   const anat = useMemo(() => (atlas ? buildAnatomy(p.model, atlas, { small }) : null), [p.model, atlas, small]);
   const grouped = useMemo(
-    () => (anat ? (p.table ? buildForm(p.model, anat, p.table) : buildGrouped(p.model, p.groupBy, anat)) : null),
-    [p.model, p.groupBy, anat, p.table],
+    () =>
+      !anat
+        ? null
+        : p.table
+          ? buildForm(p.model, anat, p.table)
+          : p.settings.groupLayout === "tree"
+            ? buildTree(p.model, anat, p.model.groups[p.groupBy])
+            : buildGrouped(p.model, p.groupBy, anat),
+    [p.model, p.groupBy, anat, p.table, p.settings.groupLayout],
   );
 
   // mount

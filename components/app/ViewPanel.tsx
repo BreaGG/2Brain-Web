@@ -5,7 +5,7 @@ import { useApp } from "./context";
 import { Icon, Range, Select, SwitchRow } from "@/components/ui";
 import { PALETTES, THEMES, paletteGradient, type ThemeId } from "@/lib/palettes";
 import type { GroupBy } from "@/lib/brain";
-import type { LabelMode, LabelSize } from "@/lib/settings";
+import type { GroupLayout, LabelMode, LabelSize } from "@/lib/settings";
 
 export default function ViewPanel({ onClose }: { onClose: () => void }) {
   const { settings: s, set, resetSettings, model } = useApp();
@@ -76,6 +76,21 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
                 { value: "type", label: "Type" },
               ]}
               onChange={(v) => set("groupBy", v)}
+            />
+          </div>
+          <div className="pick">
+            <span>↳ Layout</span>
+            <Select<GroupLayout>
+              label="Layout"
+              value={s.groupLayout}
+              options={[
+                { value: "spheres", label: "Spheres" },
+                { value: "tree", label: "Folder tree" },
+              ]}
+              onChange={(v) => {
+                set("groupLayout", v);
+                if (s.form < 0.5 && !s.tableBuilder) set("form", 1);
+              }}
             />
           </div>
           <SwitchRow label="Split" on={s.split} onChange={(v) => set("split", v)} />
