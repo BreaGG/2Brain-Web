@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { Anatomy, Grouped } from "./anatomy";
-import { KIND_DUST, KIND_MATTER, KIND_NERVE, KIND_SPINE, KIND_STEM, FIG } from "./anatomy";
+import { KIND_FACE, KIND_MATTER, KIND_NERVE, KIND_SPINE, KIND_STEM, FRAME, FRAME_CY, BRAIN_C } from "./anatomy";
 
 /* ───────────────────────────────────────────────────────────────────────────
  * Imperative three.js scene for the brain. React owns state; this class only
@@ -43,26 +43,30 @@ const POINT_VS = /* glsl */ `
   attribute float aOrder;
   attribute float aLit;
   attribute float aVis;
+  attribute float aSplitX;
+  attribute float aMatter;
+  uniform float uSplit;
+  uniform float uMatterK;
+  uniform float uBodyK;
   uniform float uForm;
   uniform float uReveal;
   uniform float uPx;
   uniform float uScale;
   uniform float uHasLit;
   uniform float uDim;
-  uniform float uFade;
   uniform float uTime;
   varying vec3 vColor;
   varying float vAlpha;
   void main() {
-    vec3 p = mix(position, aLayout, uForm);
+    vec3 p = mix(position + vec3(aSplitX * uSplit, 0.0, 0.0), aLayout, uForm);
     p.x += sin(uTime * 0.6 + aOrder * 61.0) * 0.006;
     p.y += cos(uTime * 0.5 + aOrder * 47.0) * 0.006;
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     float rev = smoothstep(aOrder - 0.03, aOrder, uReveal);
     float lit = mix(1.0, mix(uDim, 1.0, aLit), uHasLit);
-    float fade = mix(1.0, mix(smoothstep(${(FIG.bottom).toFixed(2)}, ${(FIG.bottom + 1.6).toFixed(2)}, position.y), 1.0, uForm), uFade);
-    vAlpha = rev * lit * aVis * fade;
+    float layer = mix(uBodyK, uMatterK, aMatter);
+    vAlpha = rev * lit * aVis * layer;
     float sz = aSize * uScale * (1.0 + 0.8 * aLit * uHasLit);
     gl_PointSize = max(1.0, sz * uPx * 18.0 / -mv.z);
     vColor = aColor;
@@ -134,7 +138,7 @@ function additive(mat: THREE.ShaderMaterial) {
   return mat;
 }
 
-function pointsMaterial(fade: number) {
+function pointsMaterial() {
   return additive(
     new THREE.ShaderMaterial({
       vertexShader: POINT_VS,
@@ -146,8 +150,10 @@ function pointsMaterial(fade: number) {
         uScale: { value: 1 },
         uHasLit: { value: 0 },
         uDim: { value: 0.12 },
-        uFade: { value: fade },
         uTime: { value: 0 },
+        uSplit: { value: 0 },
+        uMatterK: { value: 1 },
+        uBodyK: { value: 1 },
       },
     }),
   );
@@ -180,16 +186,20 @@ export class BrainScene {
 
   private notes?: THREE.Points;
   private notesGeo?: THREE.BufferGeometry;
-  private notesMat = pointsMaterial(0);
+  private notesMat = pointsMaterial();
   private notePosCur = new Float32Array(0);
   private noteVis = new Float32Array(0);
 
   private rec?: THREE.Points;
   private recGeo?: THREE.BufferGeometry;
-  private recMat = pointsMaterial(1);
+  private recMat = pointsMaterial();
 
-  private outline?: THREE.Points;
-  private outlineMat = pointsMaterial(0);
+  private fibres?: THREE.LineSegments;
+  private fibreGeo?: THREE.BufferGeometry;
+  private fibreMat = additive(
+    new THREE.ShaderMaterial({ vertexShader: LINE_VS, fragmentShader: LINE_FS, uniforms: { uOpacity: { value: 0.22 } } }),
+  );
+  private recRgb: Float32Array = new Float32Array(0);
 
   private linesGeo?: THREE.BufferGeometry;
   private lines?: THREE.LineSegments;
@@ -202,7 +212,7 @@ export class BrainScene {
   private ghostPts?: THREE.Points;
   private ghostLines?: THREE.LineSegments;
   private ghostLineGeo?: THREE.BufferGeometry;
-  private ghostMat = pointsMaterial(0);
+  private ghostMat = pointsMaterial();
   private ghostLineMat = additive(
     new THREE.ShaderMaterial({ vertexShader: LINE_VS, fragmentShader: LINE_FS, uniforms: { uOpacity: { value: 0.18 } } }),
   );
@@ -267,7 +277,7 @@ export class BrainScene {
     host.appendChild(this.renderer.domElement);
 
     this.scene.add(this.root);
-    this.camera.position.set(0, -0.4, 18);
+    this.camera.position.set(0, FRAME_CY, 18);
 
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
@@ -276,7 +286,7 @@ export class BrainScene {
     this.controls.zoomSpeed = 0.8;
     this.controls.minDistance = 2.5;
     this.controls.maxDistance = 42;
-    this.controls.target.set(0, -0.45, 0);
+    this.controls.target.set(0, FRAME_CY, 0);
     this.controls.addEventListener("start", () => (this.userTurning = true));
     this.controls.addEventListener("end", () => (this.userTurning = false));
 
@@ -292,6 +302,8 @@ export class BrainScene {
     el.addEventListener("pointerup", this.onUp);
     el.addEventListener("pointerleave", this.onLeave);
     el.addEventListener("dblclick", this.onDbl);
+
+    if (process.env.NODE_ENV !== "production") (window as unknown as { __brainScene?: BrainScene }).__brainScene = this;
 
     this.ro = new ResizeObserver(() => this.resize());
     this.ro.observe(host);
@@ -317,7 +329,7 @@ export class BrainScene {
     const sizes = new Float32Array(n);
     const orders = new Float32Array(n);
     for (let i = 0; i < n; i++) {
-      sizes[i] = 4.2;
+      sizes[i] = 3.3;
       orders[i] = 0.002 + (i / Math.max(1, n)) * 0.04;
     }
     g.setAttribute("aSize", new THREE.BufferAttribute(sizes, 1));
@@ -343,13 +355,17 @@ export class BrainScene {
     const rs = new Float32Array(P);
     for (let k = 0; k < P; k++) {
       const kind = anat.recKind[k];
-      rs[k] = kind === KIND_SPINE ? 2.0 : kind === KIND_NERVE ? 1.9 : kind === KIND_STEM ? 2.0 : kind === KIND_MATTER ? 2.1 : 1.75;
+      rs[k] = kind === KIND_SPINE ? 1.7 : kind === KIND_NERVE ? 1.55 : kind === KIND_STEM ? 1.3 : kind === KIND_MATTER ? 1.45 : kind === KIND_FACE ? 1.2 : 1.5;
     }
+    const matterFlag = new Float32Array(P);
+    for (let k = 0; k < P; k++) matterFlag[k] = anat.recKind[k] === KIND_MATTER ? 1 : 0;
+    rg.setAttribute("aSplitX", new THREE.BufferAttribute(anat.recSplit, 1));
+    rg.setAttribute("aMatter", new THREE.BufferAttribute(matterFlag, 1));
     rg.setAttribute("aSize", new THREE.BufferAttribute(rs, 1));
-    rg.setAttribute("aOrder", new THREE.BufferAttribute(new Float32Array(anat.recOrder).map((o) => 0.06 + o * 0.94), 1));
+    rg.setAttribute("aOrder", new THREE.BufferAttribute(anat.recOrder, 1));
     rg.setAttribute("aLit", new THREE.BufferAttribute(new Float32Array(P), 1));
     rg.setAttribute("aVis", new THREE.BufferAttribute(new Float32Array(P).fill(1), 1));
-    rg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, -1, 0), 12);
+    rg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, -7, 0), 12);
     this.recGeo = rg;
     if (this.rec) this.root.remove(this.rec);
     this.rec = new THREE.Points(rg, this.recMat);
@@ -358,25 +374,25 @@ export class BrainScene {
     this.root.add(this.rec);
     this.recMat.uniforms.uDim.value = 0.07;
 
-    // outline
-    const O = anat.outline.length / 3;
-    const og = new THREE.BufferGeometry();
-    og.setAttribute("position", new THREE.BufferAttribute(anat.outline, 3));
-    og.setAttribute("aLayout", og.getAttribute("position"));
-    const oc = new Float32Array(O * 3).fill(0.42);
-    og.setAttribute("aColor", new THREE.BufferAttribute(oc, 3));
-    og.setAttribute("aSize", new THREE.BufferAttribute(new Float32Array(O).fill(1.4), 1));
-    og.setAttribute("aOrder", new THREE.BufferAttribute(new Float32Array(O).fill(0.01), 1));
-    og.setAttribute("aLit", new THREE.BufferAttribute(new Float32Array(O), 1));
-    og.setAttribute("aVis", new THREE.BufferAttribute(new Float32Array(O).fill(1), 1));
-    if (this.outline) {
-      this.outline.geometry.dispose();
-      this.root.remove(this.outline);
+    // nerve fibres: each body point joined to the point before it
+    this.fibreGeo?.dispose();
+    const F = anat.fibres.length;
+    const fp = new Float32Array(F * 3);
+    for (let e = 0; e < F; e++) {
+      const k = anat.fibres[e];
+      fp[e * 3] = anat.recPos[k * 3];
+      fp[e * 3 + 1] = anat.recPos[k * 3 + 1];
+      fp[e * 3 + 2] = anat.recPos[k * 3 + 2];
     }
-    this.outline = new THREE.Points(og, this.outlineMat);
-    this.outline.frustumCulled = false;
-    this.root.add(this.outline);
-    this.outlineMat.uniforms.uHasLit.value = 0;
+    const fg = new THREE.BufferGeometry();
+    fg.setAttribute("position", new THREE.BufferAttribute(fp, 3));
+    fg.setAttribute("color", new THREE.BufferAttribute(new Float32Array(F * 3), 3));
+    this.fibreGeo = fg;
+    if (this.fibres) this.root.remove(this.fibres);
+    this.fibres = new THREE.LineSegments(fg, this.fibreMat);
+    this.fibres.frustumCulled = false;
+    this.fibres.renderOrder = 0;
+    this.root.add(this.fibres);
 
     // links
     this.linesGeo?.dispose();
@@ -458,30 +474,32 @@ export class BrainScene {
     for (let k = 0; k < anat.recCount; k++) {
       const c = groupRgb[this.groupOf[anat.recNote[k]]] ?? [1, 1, 1];
       const kind = anat.recKind[k];
-      let white = 0;
-      let gain = 0.42;
+      let white = 0.3;
+      let gain = 0.6;
       if (kind === KIND_SPINE) {
-        white = 0.72;
+        white = 0.75;
         gain = 1.0;
       } else if (kind === KIND_STEM) {
-        white = 0.55;
-        gain = 0.95;
+        white = 0.45;
+        gain = 0.42;
       } else if (kind === KIND_NERVE) {
-        white = 0.55;
-        gain = 0.92;
-      } else if (kind === KIND_DUST) {
-        white = 0.12;
-        gain = 0.5;
+        white = 0.45;
+        gain = 0.82;
+      } else if (kind === KIND_FACE) {
+        white = 0.4;
+        gain = 0.45;
       } else if (kind === KIND_MATTER) {
-        white = 0.2;
-        gain = 0.95;
+        white = 0.18;
+        gain = 0.62;
       }
       arr[k * 3] = (c[0] + (1 - c[0]) * white) * gain;
       arr[k * 3 + 1] = (c[1] + (1 - c[1]) * white) * gain;
       arr[k * 3 + 2] = (c[2] + (1 - c[2]) * white) * gain;
     }
     rc.needsUpdate = true;
+    this.recRgb = arr;
     this.updateLinkColors();
+    this.updateFibreColors();
   }
 
   setLit(noteLit: Uint8Array | null, recLitByNote: Uint8Array | null) {
@@ -498,7 +516,9 @@ export class BrainScene {
     const src = recLitByNote ?? noteLit;
     for (let k = 0; k < anat.recCount; k++) ra[k] = src ? Math.min(1, src[anat.recNote[k]]) : 0;
     rl.needsUpdate = true;
+    this.recLit = src ? ra : null;
     this.updateLinkColors();
+    this.updateFibreColors();
   }
 
   setHidden(hidden: Uint8Array) {
@@ -510,8 +530,10 @@ export class BrainScene {
     const ra = rv.array as Float32Array;
     for (let k = 0; k < anat.recCount; k++) ra[k] = hidden[anat.recNote[k]] ? 0 : 1;
     rv.needsUpdate = true;
+    this.recVis = ra;
     this.notesDirty = true;
     this.updateLinkColors();
+    this.updateFibreColors();
   }
 
   setView(v: SceneView) {
@@ -547,7 +569,7 @@ export class BrainScene {
   /** Smoothly bring a note to the centre of the view. */
   focusNote(i: number) {
     if (!this.anat) return;
-    this.flyTo = { note: i, dist: Math.max(5.5, this.fitDist * 0.42) };
+    this.flyTo = { note: i, dist: Math.max(4.6, this.fitDist * 0.3) };
   }
 
   /** Smoothly return to the whole figure. */
@@ -556,10 +578,19 @@ export class BrainScene {
   }
   private flyTo: { note: number | null; dist: number } | null = null;
 
+  /** Point the camera at a world position from a distance (used by tests and tours). */
+  lookAt(x: number, y: number, z: number, dist: number, azimuth = 0) {
+    this.flyTo = null;
+    this.root.rotation.set(0, 0, 0);
+    this.controls.target.set(x, y, z);
+    this.camera.position.set(x + Math.sin(azimuth) * dist, y, z + Math.cos(azimuth) * dist);
+    this.controls.update();
+  }
+
   resetCamera() {
     this.flyTo = null;
-    this.camera.position.set(0, -0.4, this.fitDist);
-    this.controls.target.set(0, -0.45 + (-1.25 + 0.45) * this.formCur, 0);
+    this.camera.position.set(0, FRAME_CY, this.fitDist);
+    this.controls.target.set(0, FRAME_CY, 0);
     this.root.rotation.set(0, 0, 0);
   }
 
@@ -578,7 +609,7 @@ export class BrainScene {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
     });
-    [this.notesMat, this.recMat, this.outlineMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat].forEach((m) => m.dispose());
+    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat].forEach((m) => m.dispose());
     this.renderer.dispose();
     el.remove();
     this.labelEls.forEach((e) => e.remove());
@@ -589,16 +620,36 @@ export class BrainScene {
   private applyVisibility() {
     const v = this.view;
     if (this.notes) this.notes.visible = v.notes;
-    if (this.rec) this.rec.visible = v.record;
+    if (this.rec) this.rec.visible = v.record || v.outline;
+    if (this.fibres) this.fibres.visible = v.record;
     if (this.lines) this.lines.visible = v.links && v.notes;
-    if (this.outline) this.outline.visible = v.outline;
     if (this.ghostPts) this.ghostPts.visible = v.ghosts && v.notes;
     if (this.ghostLines) this.ghostLines.visible = v.ghosts && v.notes && v.links;
     const s = v.pointSize / 100;
     this.notesMat.uniforms.uScale.value = s;
     this.recMat.uniforms.uScale.value = s;
     this.ghostMat.uniforms.uScale.value = s;
-    this.outlineMat.uniforms.uScale.value = s;
+  }
+
+  private recLit: Float32Array | null = null;
+  private recVis: Float32Array | null = null;
+  private updateFibreColors() {
+    const anat = this.anat;
+    if (!anat || !this.fibreGeo || !this.recRgb.length) return;
+    const col = this.fibreGeo.getAttribute("color") as THREE.BufferAttribute;
+    const a = col.array as Float32Array;
+    const lit = this.recLit;
+    const vis = this.recVis;
+    for (let e = 0; e < anat.fibres.length; e++) {
+      const k = anat.fibres[e];
+      let f = 1;
+      if (lit) f = lit[k] ? 1.5 : 0.06;
+      if (vis && !vis[k]) f = 0;
+      a[e * 3] = this.recRgb[k * 3] * f;
+      a[e * 3 + 1] = this.recRgb[k * 3 + 1] * f;
+      a[e * 3 + 2] = this.recRgb[k * 3 + 2] * f;
+    }
+    col.needsUpdate = true;
   }
 
   private updateLinkColors() {
@@ -629,7 +680,7 @@ export class BrainScene {
     const s = this.splitCur;
     const P = this.notePosCur;
     for (let i = 0; i < anat.n * 3; i++) {
-      const a = anat.notePos[i] + (gr.noteLobe[i] - anat.notePos[i]) * s;
+      const a = anat.notePos[i] + (anat.noteSplit[i] - anat.notePos[i]) * s;
       P[i] = a + (gr.noteLayout[i] - a) * f;
     }
     (this.notesGeo.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
@@ -666,12 +717,12 @@ export class BrainScene {
         x /= from.length;
         y /= from.length;
         z /= from.length;
-        const cy = 3.72 * (1 - f) + y * f;
-        const dx = x;
+        const cy = BRAIN_C.y * (1 - f) + y * f;
+        const dx = x - BRAIN_C.x * (1 - f);
         const dy = y - cy;
-        const dz = z;
+        const dz = z - BRAIN_C.z * (1 - f);
         const len = Math.hypot(dx, dy, dz) || 1;
-        const push = 0.35 + (g % 5) * 0.05;
+        const push = 0.22 + (g % 5) * 0.03;
         ga[g * 3] = x + (dx / len) * push;
         ga[g * 3 + 1] = y + (dy / len) * push;
         ga[g * 3 + 2] = z + (dz / len) * push;
@@ -715,8 +766,8 @@ export class BrainScene {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     const t = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
-    const distH = 10.6 / 2 / t;
-    const distW = 6.2 / 2 / t / this.camera.aspect;
+    const distH = (FRAME.top - FRAME.bottom) / 2 / t;
+    const distW = FRAME.width / 2 / t / this.camera.aspect;
     const prev = this.fitDist;
     this.fitDist = Math.max(distH, distW);
     // keep the viewing direction and relative zoom, rescaled to the new fit
@@ -725,7 +776,7 @@ export class BrainScene {
     this.camera.position.copy(this.controls.target).add(off);
     this.camera.updateProjectionMatrix();
     const px = this.renderer.getPixelRatio();
-    for (const m of [this.notesMat, this.recMat, this.outlineMat, this.ghostMat, this.ringMat]) m.uniforms.uPx.value = px;
+    for (const m of [this.notesMat, this.recMat, this.ghostMat, this.ringMat]) m.uniforms.uPx.value = px;
   }
 
   private loop = () => {
@@ -756,16 +807,16 @@ export class BrainScene {
       m.uniforms.uHasLit.value = this.hasLitCur;
       m.uniforms.uTime.value = t;
     }
-    this.outlineMat.uniforms.uReveal.value = this.revealCur;
-    const outlineK = (1 - this.formCur) * (this.view.outlineOpacity / 100);
-    // outline brightness rides on uDim (uHasLit = 1, aLit = 0 → alpha = uDim)
-    this.outlineMat.uniforms.uHasLit.value = 1;
-    this.outlineMat.uniforms.uDim.value = outlineK * (1 - this.hasLitCur * 0.6);
-    if (this.outline) this.outline.visible = this.view.outline && outlineK > 0.01;
-    this.linesMat.uniforms.uOpacity.value = 0.26 * (1 - this.formCur * 0.55);
+    // brain matter rides on "Brain outline", the body on "Record"
+    this.recMat.uniforms.uSplit.value = this.splitCur;
+    this.recMat.uniforms.uMatterK.value = this.view.outline ? this.view.outlineOpacity / 100 : 0;
+    this.recMat.uniforms.uBodyK.value = this.view.record ? 1 : 0;
+    this.fibreMat.uniforms.uOpacity.value = 0.2 * (1 - this.formCur) * (1 - this.hasLitCur * 0.3);
+    if (this.fibres) this.fibres.visible = this.view.record && this.formCur < 0.98;
+    this.linesMat.uniforms.uOpacity.value = (0.1 + 0.08 * this.formCur) * (1 + this.hasLitCur * 1.4);
 
     // camera target follows the form
-    const ty = -0.45 + (-1.25 + 0.45) * this.formCur;
+    const ty = FRAME_CY;
     if (this.flyTo) {
       const f = this.flyTo;
       const ft =
