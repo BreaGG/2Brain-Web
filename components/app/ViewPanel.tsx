@@ -1,14 +1,30 @@
 "use client";
 
-import type { CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { useApp } from "./context";
 import { Icon, Range, Select, SwitchRow } from "@/components/ui";
 import { PALETTES, THEMES, paletteGradient, type ThemeId } from "@/lib/palettes";
 import type { GroupBy } from "@/lib/brain";
-import type { GroupLayout, LabelMode, LabelSize } from "@/lib/settings";
+import type { GroupLayout, LabelMode, LabelSize, RecordOrder } from "@/lib/settings";
 
 export default function ViewPanel({ onClose }: { onClose: () => void }) {
-  const { settings: s, set, resetSettings, model } = useApp();
+  const { settings: s, set, resetSettings, model, startTour, demo, setDemo, usingSample } = useApp();
+  const [more, setMore] = useState(() => {
+    try {
+      return localStorage.getItem("2brain.view.more") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleMore = () =>
+    setMore((m) => {
+      try {
+        localStorage.setItem("2brain.view.more", m ? "0" : "1");
+      } catch {
+        /* per-browser convenience only */
+      }
+      return !m;
+    });
 
   return (
     <aside className="viz-menu" aria-label="View">
@@ -23,6 +39,7 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="viz-scroll">
+        {more && (
         <section className="viz-section">
           <div className="label">Appearance</div>
           <div className="pick">
@@ -38,6 +55,7 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
             <Range className="range" label="Ground glow" min={0} max={100} value={s.ground} onChange={(v) => set("ground", v)} />
           </div>
         </section>
+        )}
 
         <section className="viz-section">
           <div className="label">Data colours</div>
@@ -56,12 +74,30 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
             <Range label="Form, from anatomy to layout" min={0} max={100} value={Math.round(s.form * 100)} onChange={(v) => set("form", v / 100)} />
             <span>Layout</span>
           </div>
+          <div className="pick">
+            <span>Order</span>
+            <Select<RecordOrder>
+              label="Order of the record"
+              value={s.order}
+              options={[
+                { value: "oldest", label: "Oldest first" },
+                { value: "newest", label: "Newest first" },
+              ]}
+              onChange={(v) => set("order", v)}
+            />
+          </div>
           <SwitchRow label="Focus brain" on={s.focusBrain} onChange={(v) => set("focusBrain", v)} />
           <SwitchRow label="Table builder" on={s.tableBuilder} onChange={(v) => set("tableBuilder", v)} />
-          <SwitchRow label="Notes" on={s.notes} onChange={(v) => set("notes", v)} />
-          <SwitchRow label="Record" on={s.record} onChange={(v) => set("record", v)} />
-          <SwitchRow label="Ghost links" note={model.ghostSlugs.length} on={s.ghosts} onChange={(v) => set("ghosts", v)} />
         </section>
+
+        {more && (
+          <section className="viz-section">
+            <div className="label">Show</div>
+            <SwitchRow label="Notes" on={s.notes} onChange={(v) => set("notes", v)} />
+            <SwitchRow label="Record" on={s.record} onChange={(v) => set("record", v)} />
+            <SwitchRow label="Ghost links" note={model.ghostSlugs.length} on={s.ghosts} onChange={(v) => set("ghosts", v)} />
+          </section>
+        )}
 
         <section className="viz-section">
           <div className="label">Groups</div>
@@ -94,6 +130,7 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
             />
           </div>
           <SwitchRow label="Split" on={s.split} onChange={(v) => set("split", v)} />
+          {more && (
           <div className="pick">
             <span>Labels</span>
             <span className="pick-pair">
@@ -119,6 +156,7 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
               />
             </span>
           </div>
+          )}
           <SwitchRow label="Hide unsorted" on={s.hideUnsorted} onChange={(v) => set("hideUnsorted", v)} />
         </section>
 
@@ -130,8 +168,10 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
             <span className="num">{s.speed}%</span>
             <Range label="Turning speed" min={10} max={300} step={10} value={s.speed} onChange={(v) => set("speed", v)} />
           </div>
+          {more && <SwitchRow label="Limit rotation" on={s.limitRotation} onChange={(v) => set("limitRotation", v)} />}
         </section>
 
+        {more && (
         <section className="viz-section">
           <div className="label">Drawn</div>
           <SwitchRow label="Links" on={s.links} onChange={(v) => set("links", v)} />
@@ -159,12 +199,34 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
             <Range label="Point size" min={30} max={300} step={5} value={s.pointSize} onChange={(v) => set("pointSize", v)} />
           </div>
         </section>
+        )}
 
-        <section className="viz-section" style={{ flexDirection: "row", justifyContent: "flex-end", gap: 16, fontSize: "var(--t1)" }}>
-          <button type="button" className="link" onClick={resetSettings}>
-            Reset
+        <div className="viz-more">
+          <button type="button" className="link" onClick={toggleMore}>
+            {more ? "Fewer options" : "More options"}
           </button>
-        </section>
+        </div>
+      </div>
+
+      <div className="viz-foot">
+        <button
+          type="button"
+          className="link"
+          onClick={() => {
+            onClose();
+            startTour();
+          }}
+        >
+          Walkthrough
+        </button>
+        {(!usingSample || demo) && (
+          <button type="button" className="link" onClick={() => setDemo(!demo)}>
+            {demo ? "Show your brain" : "Show a demo brain"}
+          </button>
+        )}
+        <button type="button" className="link" onClick={resetSettings}>
+          Reset
+        </button>
       </div>
     </aside>
   );

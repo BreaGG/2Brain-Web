@@ -56,6 +56,7 @@ export default function StageOverlay({
           </button>
         </div>
       </div>
+      <DemoChip />
       {vizOpen && <ViewPanel onClose={() => setVizOpen(false)} />}
       {settings.tableBuilder && <TableBuilder />}
       <Legend />
@@ -309,6 +310,19 @@ function Tooltip({ i, x, y }: { i: number; x: number; y: number }) {
         <Dot c={colorOf(i)} />
         {g.list[g.of[i]]?.label} · {singularType(n.type)} · {n.in.length + n.out.length} links{n.date ? ` · ${fmtDate(n.date)}` : ""}
       </span>
+    </div>
+  );
+}
+
+function DemoChip() {
+  const { demo, setDemo } = useApp();
+  if (!demo) return null;
+  return (
+    <div className="demo-chip" role="status">
+      <span>Demo brain</span>
+      <button type="button" onClick={() => setDemo(false)}>
+        Back to yours
+      </button>
     </div>
   );
 }

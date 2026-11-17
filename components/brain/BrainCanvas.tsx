@@ -60,7 +60,8 @@ export default function BrainCanvas(p: BrainCanvasProps) {
     };
   }, []);
 
-  const anat = useMemo(() => (atlas ? buildAnatomy(p.model, atlas, { small }) : null), [p.model, atlas, small]);
+  const newestFirst = p.settings.order === "newest";
+  const anat = useMemo(() => (atlas ? buildAnatomy(p.model, atlas, { small, newestFirst }) : null), [p.model, atlas, small, newestFirst]);
   const grouped = useMemo(
     () =>
       !anat
@@ -132,8 +133,9 @@ export default function BrainCanvas(p: BrainCanvasProps) {
       ghosts: st.ghosts,
       focusBrain: st.focusBrain,
       tracts: st.tracts,
+      limitRotation: st.limitRotation,
     });
-  }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, st.focusBrain, st.tracts, s, anat]);
+  }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, st.focusBrain, st.tracts, st.limitRotation, s, anat]);
 
   useEffect(() => {
     const layoutLabels: SceneLabel[] = (grouped?.labels ?? []).map((l) => ({ text: l.text, pos: l.pos, kind: l.kind, group: l.group }));
