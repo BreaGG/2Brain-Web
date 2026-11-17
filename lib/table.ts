@@ -2,11 +2,11 @@
  * questions its answers put to the record. Pure data — no three.js here. */
 
 import type { Grouping, Model } from "./brain";
-import { monthKey, monthLabel } from "./brain";
+import { monthKey, monthLabel, monthRange } from "./brain";
 
 export type AxisKey = "month" | "year" | "weekday" | "folder" | "domain" | "type" | "links" | "length" | "none";
 export type FormKey = "grid" | "ribbon" | "wheel" | "spheres" | "shells" | "clusters" | "folders";
-export type AnswerKey = "stream" | "waves" | "chord" | "clock" | "calendar" | "returns" | "lifelines" | "balance";
+export type AnswerKey = "stream" | "flow" | "waves" | "chord" | "clock" | "calendar" | "returns" | "lifelines" | "balance";
 export type SizeKey = "same" | "words" | "links";
 
 export const AXES: { value: AxisKey; label: string }[] = [
@@ -33,6 +33,7 @@ export const FORMS: { value: FormKey; label: string; hint: string }[] = [
 
 export const ANSWERS: { value: AnswerKey; label: string; question: string }[] = [
   { value: "stream", label: "Stream", question: "How has the mix of what you write about shifted over time?" },
+  { value: "flow", label: "Flow", question: "Where does what I write come from, and where does it go?" },
   { value: "waves", label: "Waves", question: "When was each area active, and which rose as another fell?" },
   { value: "chord", label: "Chord", question: "Which areas feed which?" },
   { value: "clock", label: "Clock", question: "What is my rhythm by weekday and season?" },
@@ -53,7 +54,7 @@ export const weekdayOf = (t: number) => (new Date(t).getUTCDay() + 6) % 7;
 const DAY = 86400000;
 
 /** One sentence that answers the answer's question from the record. */
-export function insight(model: Model, answer: AnswerKey, grouping: Grouping): string {
+export function insight(model: Model, answer: AnswerKey, grouping: Grouping, axes?: { across: AxisKey; down: AxisKey }): string {
   const notes = model.notes;
   const dated = notes.filter((n) => n.date != null);
   const label = (g: number) => grouping.list[g]?.label ?? "—";
@@ -62,6 +63,20 @@ export function insight(model: Model, answer: AnswerKey, grouping: Grouping): st
       const total = grouping.list.reduce((s, g) => s + g.record, 0) || 1;
       const top = grouping.list.reduce((b, g, i) => (g.record > (grouping.list[b]?.record ?? -1) ? i : b), 0);
       return `${label(top)} holds ${Math.round((grouping.list[top].record / total) * 100)}% of the record.`;
+    }
+    case "flow": {
+      const A = axisOf(model, axes?.across ?? "folder");
+      const D = axisOf(model, axes?.down ?? "type");
+      const c = new Map<string, number>();
+      for (const n of notes) {
+        const k = `${A.of[n.i]}|${D.of[n.i]}`;
+        c.set(k, (c.get(k) ?? 0) + 1);
+      }
+      if (!c.size) return "Nothing to follow yet.";
+      const [k, v] = [...c.entries()].sort((x, y) => y[1] - x[1])[0];
+      const [a, d] = k.split("|").map(Number);
+      const share = Math.round((v / Math.max(1, notes.length)) * 100);
+      return `The widest band runs from ${A.labels[a]} to ${D.labels[d]}: ${v} notes, ${share}% of the record.`;
     }
     case "waves": {
       const c = new Map<string, number>();
@@ -137,5 +152,70 @@ export function insight(model: Model, answer: AnswerKey, grouping: Grouping): st
       }
       return `${Math.round((own / Math.max(1, own + src)) * 100)}% of the words are your own; the rest summarise sources and people.`;
     }
+  }
+}
+
+/* ── axes ─────────────────────────────────────────────────────────────────── */
+
+export interface Axis {
+  labels: string[];
+  of: Int32Array;
+}
+
+/* ── axes ─────────────────────────────────────────────────────────────────── */
+
+export function axisOf(model: Model, key: AxisKey): Axis {
+  const n = model.notes.length;
+  const of = new Int32Array(n);
+  const withUndated = (labels: string[], idx: (t: number) => number): Axis => {
+    let undated = false;
+    model.notes.forEach((x, i) => {
+      if (x.date == null) {
+        of[i] = -1;
+        undated = true;
+      } else of[i] = idx(x.date);
+    });
+    if (undated) {
+      const u = labels.length;
+      for (let i = 0; i < n; i++) if (of[i] < 0) of[i] = u;
+      labels = [...labels, "Undated"];
+    }
+    return { labels, of };
+  };
+  const fromGrouping = (g: Grouping): Axis => ({ labels: g.list.map((x) => x.label), of: g.of });
+  const buckets = (edges: number[], names: string[], v: (i: number) => number): Axis => {
+    for (let i = 0; i < n; i++) {
+      const x = v(i);
+      let b = 0;
+      while (b < edges.length && x >= edges[b]) b++;
+      of[i] = b;
+    }
+    return { labels: names, of };
+  };
+  switch (key) {
+    case "month": {
+      const months = monthRange(model);
+      const at = new Map(months.map((m, k) => [m, k]));
+      return withUndated(months.map((m) => monthLabel(m)), (t) => at.get(monthKey(t)) ?? 0);
+    }
+    case "year": {
+      const ys = [...new Set(model.notes.filter((x) => x.date != null).map((x) => new Date(x.date!).getUTCFullYear()))].sort();
+      const at = new Map(ys.map((y, k) => [y, k]));
+      return withUndated(ys.map(String), (t) => at.get(new Date(t).getUTCFullYear()) ?? 0);
+    }
+    case "weekday":
+      return withUndated(WEEKDAYS.slice(), weekdayOf);
+    case "folder":
+      return fromGrouping(model.groups.folder);
+    case "domain":
+      return fromGrouping(model.groups.domain);
+    case "type":
+      return fromGrouping(model.groups.type);
+    case "links":
+      return buckets([1, 3, 6, 11], ["No links", "1–2", "3–5", "6–10", "11 or more"], (i) => model.notes[i].in.length + model.notes[i].out.length);
+    case "length":
+      return buckets([100, 300, 1000], ["Under 100 words", "100–300", "300–1,000", "Over 1,000"], (i) => model.notes[i].words);
+    case "none":
+      return { labels: ["All"], of };
   }
 }
