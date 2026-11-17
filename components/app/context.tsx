@@ -49,6 +49,8 @@ export interface AppApi {
   gestures: boolean;
   setGestures: (v: boolean) => void;
   replaceSettings: (s: Settings) => void;
+  /** New notes can be written to the wiki repository from here. */
+  writable: boolean;
   startTour: () => void;
   /** Showing the built-in demo brain instead of the wiki. */
   demo: boolean;

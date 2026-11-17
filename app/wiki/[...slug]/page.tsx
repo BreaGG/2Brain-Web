@@ -24,5 +24,5 @@ export default async function WikiPage({ params }: Props) {
   const slugStr = slug.map(decodeURIComponent).join("/");
   const pages = await getAllPages();
   if (!pages.some((p) => p.slug === slugStr)) notFound();
-  return <BrainApp pages={pages} initialSlug={slugStr} repo={getRepoInfo()} usingSample={!hasWikiSource()} />;
+  return <BrainApp pages={pages} initialSlug={slugStr} repo={getRepoInfo()} usingSample={!hasWikiSource()} writable={hasWikiSource() && !!process.env.WIKI_WRITE_KEY} />;
 }

@@ -1838,6 +1838,152 @@ button.row:hover .grow {
   word-break: break-word;
 }
 
+/* ── write ──────────────────────────────────────────────────────────────── */
+
+.pane-body > .sect:first-child {
+  margin-top: 0;
+}
+.write {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.write-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+.write-field .label {
+  color: var(--dim);
+}
+.write-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+}
+.write-row .select {
+  height: 30px;
+  width: 100%;
+}
+.write-title,
+.field-input,
+.write-body,
+.write-path {
+  width: 100%;
+  border: 1px solid var(--hair);
+  background: transparent;
+  outline: none;
+  transition: border-color var(--fast) var(--ease);
+}
+.write-title:focus,
+.field-input:focus,
+.write-body:focus,
+.write-path:focus-within {
+  border-color: var(--ink);
+}
+.write-title {
+  height: 38px;
+  padding: 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.field-input {
+  height: 30px;
+  padding: 0 8px;
+  font-size: var(--t1);
+}
+.write-path {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--dim);
+}
+.write-path input {
+  flex: 1;
+  min-width: 40px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--ink);
+  font: inherit;
+}
+.write-body {
+  padding: 10px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 180px;
+}
+.write-remember {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  font-size: var(--t1);
+  white-space: nowrap;
+}
+.write-remember input {
+  accent-color: var(--ink);
+}
+.write-acts {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.write-acts .btn {
+  flex: none;
+}
+.write-acts .btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+  background: transparent;
+  color: var(--ink);
+}
+.write-dest {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--dim);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.write-warn {
+  font-size: 11.5px;
+  color: var(--l1);
+}
+.write-forget {
+  width: fit-content;
+  font-size: 11.5px;
+}
+.write-result {
+  padding: 10px 12px;
+  border: 1px solid var(--hair);
+  font-size: 12.5px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.write-result.ok {
+  border-color: var(--l3);
+}
+.write-result.bad {
+  border-color: var(--l0);
+}
+.write-wait {
+  color: var(--dim);
+}
+.write-off {
+  padding: 12px;
+  border: 1px dashed var(--hair);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 /* ── reader ─────────────────────────────────────────────────────────────── */
 
 .reader-meta {

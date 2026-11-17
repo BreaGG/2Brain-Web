@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { useApp, ADD_ACCENT } from "@/components/app/context";
 import type { PaneProps } from "@/components/app/Panes";
-import { BrainMark, Icon, PaneHead, Sect } from "@/components/ui";
+import { Icon, PaneHead, Sect } from "@/components/ui";
+import WriteNote from "./WriteNote";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -40,24 +41,21 @@ export default function Add({ onClose }: PaneProps) {
     <>
       <PaneHead title="Add to your record" accent={ADD_ACCENT} onClose={onClose} />
       <div className="pane-body">
-        <div className="drop">
-          <BrainMark size={44} />
-          <p>Write a new note.</p>
-          <div className="acts">
-            <button type="button" className="link" onClick={() => copy("main", template(TEMPLATES[0], domain))}>
-              {copied === "main" ? "Copied" : "Copy the template"}
-            </button>
-            {gh && (
+        <Sect label="Write a new note" accent={ADD_ACCENT}>
+          <WriteNote />
+        </Sect>
+        <p style={{ fontSize: 12.5, marginTop: 14, color: "var(--dim)" }}>
+          {usingSample
+            ? "You are looking at the sample wiki. Set GITHUB_OWNER, GITHUB_REPO and GITHUB_TOKEN to read your own."
+            : "Notes written straight in the repository appear here within five minutes; notes saved from here appear at once."}
+          {gh && (
+            <>
+              {" "}
               <a className="link" href={`${gh}/tree/HEAD/wiki`} target="_blank" rel="noreferrer">
                 Open the wiki on GitHub
               </a>
-            )}
-          </div>
-        </div>
-        <p style={{ fontSize: 13, marginTop: 10 }}>
-          {usingSample
-            ? "You are looking at the sample wiki. Set GITHUB_OWNER, GITHUB_REPO and GITHUB_TOKEN to read your own."
-            : "Your wiki lives in your GitHub repository. New and changed notes appear here within five minutes."}
+            </>
+          )}
         </p>
 
         <Sect label="How a note is read" accent={ADD_ACCENT}>
@@ -68,7 +66,7 @@ export default function Add({ onClose }: PaneProps) {
           <div className="code">{`# Title\n\n**Type:** concept | person | source-summary | synthesis\n**Domain:** research / reading\n**Sources:** [[a-source]], [[another]]\n**Last updated:** ${today()}`}</div>
         </Sect>
 
-        <Sect label="Start from a kind of note" accent={ADD_ACCENT}>
+        <Sect label="Or copy a template" accent={ADD_ACCENT}>
           {TEMPLATES.map((t) => (
             <details key={t.kind} className="acc">
               <summary>
