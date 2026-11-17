@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Model, GroupBy } from "@/lib/brain";
 import type { Settings } from "@/lib/settings";
 import { buildAnatomy, buildGrouped, loadAtlas, type Atlas } from "./anatomy";
+import { buildForm, type FormSpec } from "./forms";
 import { BrainScene, type SceneLabel } from "./scene";
 
 export interface BrainCanvasProps {
@@ -13,6 +14,9 @@ export interface BrainCanvasProps {
   groupOf: Int32Array;
   groupCount: number;
   groupRgb: [number, number, number][];
+  /** The table builder's form, or null for the groups layout. */
+  table: FormSpec | null;
+  sizeK: Float32Array | null;
   noteLit: Uint8Array | null;
   recLit: Uint8Array | null;
   hidden: Uint8Array;
@@ -56,7 +60,10 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   }, []);
 
   const anat = useMemo(() => (atlas ? buildAnatomy(p.model, atlas, { small }) : null), [p.model, atlas, small]);
-  const grouped = useMemo(() => (anat ? buildGrouped(p.model, p.groupBy, anat) : null), [p.model, p.groupBy, anat]);
+  const grouped = useMemo(
+    () => (anat ? (p.table ? buildForm(p.model, anat, p.table) : buildGrouped(p.model, p.groupBy, anat)) : null),
+    [p.model, p.groupBy, anat, p.table],
+  );
 
   // mount
   useEffect(() => {
@@ -86,7 +93,7 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   }, [anat, p.model, s]);
 
   useEffect(() => {
-    if (grouped) s.current?.setGrouped(grouped, p.groupOf, p.groupCount);
+    if (grouped) s.current?.setLayout(grouped, p.groupOf, p.groupCount);
   }, [grouped, p.groupOf, p.groupCount, s, anat]);
 
   useEffect(() => {
@@ -120,8 +127,21 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, st.focusBrain, s, anat]);
 
   useEffect(() => {
-    s.current?.setLabels(p.labels, st.labelSize);
-  }, [p.labels, st.labelSize, s]);
+    const layoutLabels: SceneLabel[] = (grouped?.labels ?? []).map((l) => ({ text: l.text, pos: l.pos, kind: l.kind, group: l.group }));
+    s.current?.setLabels([...p.labels, ...layoutLabels], st.labelSize);
+  }, [p.labels, st.labelSize, s, grouped, p.groupRgb]);
+
+  useEffect(() => {
+    s.current?.setSizeK(p.sizeK);
+  }, [p.sizeK, s, anat]);
+
+  // the table builder's panel covers the left of the stage on wide screens
+  useEffect(() => {
+    const apply = () => s.current?.setInsetLeft(p.table && window.innerWidth >= 860 ? 268 : 0);
+    apply();
+    window.addEventListener("resize", apply);
+    return () => window.removeEventListener("resize", apply);
+  }, [p.table, s, anat]);
 
   useEffect(() => {
     s.current?.setSelected(p.selected);

@@ -1,5 +1,6 @@
 import type { GroupBy } from "./brain";
 import type { PaletteId, ThemeId } from "./palettes";
+import type { AnswerKey, AxisKey, FormKey, SizeKey } from "./table";
 
 export type LabelMode = "lit" | "all" | "none";
 export type LabelSize = "auto" | "small" | "large";
@@ -10,6 +11,14 @@ export interface Settings {
   palette: PaletteId;
   form: number; // 0 = anatomy, 1 = layout
   tableBuilder: boolean;
+  tbAcross: AxisKey;
+  tbDown: AxisKey;
+  tbForm: FormKey;
+  tbAnswer: AnswerKey | "";
+  tbSize: SizeKey;
+  tbFilter: string; // "all" | "type:<key>" | "folder:<key>"
+  tbMono: boolean;
+  tbCounts: boolean;
   focusBrain: boolean;
   notes: boolean;
   record: boolean;
@@ -34,6 +43,14 @@ export const DEFAULT_SETTINGS: Settings = {
   palette: "default",
   form: 0,
   tableBuilder: false,
+  tbAcross: "month",
+  tbDown: "folder",
+  tbForm: "grid",
+  tbAnswer: "",
+  tbSize: "same",
+  tbFilter: "all",
+  tbMono: false,
+  tbCounts: false,
   focusBrain: false,
   notes: true,
   record: true,
