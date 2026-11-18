@@ -152,7 +152,7 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, st.focusBrain, st.tracts, st.limitRotation, s, anat]);
 
   useEffect(() => {
-    const layoutLabels: SceneLabel[] = (grouped?.labels ?? []).map((l) => ({ text: l.text, pos: l.pos, kind: l.kind, group: l.group }));
+    const layoutLabels: SceneLabel[] = (grouped?.labels ?? []).map((l) => ({ text: l.text, pos: l.pos, kind: l.kind, group: l.group, gal: l.gal }));
     s.current?.setLabels([...p.labels, ...layoutLabels], st.labelSize);
   }, [p.labels, st.labelSize, s, grouped, p.groupRgb]);
 

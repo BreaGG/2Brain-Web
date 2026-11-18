@@ -40,6 +40,7 @@ export interface SceneLabel {
   /** A fixed place in the layout (axis labels, titles). Shown only at Layout. */
   pos?: [number, number, number];
   kind?: LabelKind;
+  gal?: number;
 }
 
 const NOTE_SIZE = 3.3;
@@ -58,7 +59,10 @@ const POINT_VS = /* glsl */ `
   attribute vec3 aGalC;
   attribute vec3 aGalA;
   attribute float aGalS;
+  attribute float aGalO;
   uniform float uSpin;
+  uniform float uCosmos;
+  uniform vec3 uOrigin;
 #endif
   uniform float uSplit;
   uniform float uMatterK;
@@ -77,10 +81,15 @@ const POINT_VS = /* glsl */ `
     float m = smoothstep(0.0, 1.0, clamp(uMorph * 1.35 - aOrder * 0.35, 0.0, 1.0));
     vec3 lay = mix(aFrom, aLayout, m);
 #ifdef SPIN
-    // cosmos: every galaxy turns on its own axis (Rodrigues' rotation)
+    // cosmos: every galaxy turns on its own axis (Rodrigues' rotation)...
     float th = aGalS * uTime * uSpin;
     vec3 d = lay - aGalC;
+    vec3 dGal = d;
     lay = aGalC + d * cos(th) + cross(aGalA, d) * sin(th) + aGalA * dot(aGalA, d) * (1.0 - cos(th));
+    // ...and orbits the centre about the vertical
+    float ph = aGalO * uTime * uSpin;
+    vec3 o = lay - uOrigin;
+    lay = uOrigin + vec3(o.x * cos(ph) + o.z * sin(ph), o.y, -o.x * sin(ph) + o.z * cos(ph));
 #endif
     vec3 p = mix(position + vec3(aSplitX * uSplit, 0.0, 0.0), lay, uForm);
     p.x += sin(uTime * 0.6 + aOrder * 61.0) * 0.006;
@@ -92,8 +101,22 @@ const POINT_VS = /* glsl */ `
     float layer = mix(uBodyK, uMatterK, aMatter);
     vAlpha = rev * lit * aVis * layer;
     float sz = aSize * uScale * (1.0 + 0.8 * aLit * uHasLit);
-    gl_PointSize = max(1.0, sz * uPx * 18.0 / -mv.z);
     vColor = aColor;
+#ifdef SPIN
+    // stars: blue-white to gold, brighter towards a galaxy's core, some twinkling
+    float h = fract(sin(aOrder * 917.3 + aSize * 13.1) * 43758.5453);
+    vec3 tint = mix(vec3(0.70, 0.80, 1.0), vec3(1.0, 0.85, 0.60), h);
+    float inGal = step(0.0001, abs(aGalS));
+    float coreGlow = exp(-length(dGal) * 3.2) * inGal;
+    vColor = mix(vColor, tint * (0.85 + 0.6 * h), 0.38 * uCosmos) * (1.0 + 1.4 * coreGlow * uCosmos);
+    vAlpha *= 1.0 - uCosmos * step(0.72, h) * 0.5 * (0.5 + 0.5 * sin(uTime * (1.5 + h * 3.0) + h * 60.0));
+    sz *= 1.0 + 0.25 * uCosmos * (h * 1.6);
+    // a lit galaxy is dense already: grow its stars less, so it keeps its colour rather than burning white
+    float litK = aLit * uHasLit * uCosmos;
+    sz /= 1.0 + 0.5 * litK;
+    vAlpha *= 1.0 - 0.25 * litK;
+#endif
+    gl_PointSize = max(1.0, sz * uPx * 18.0 / -mv.z);
   }
 `;
 
@@ -184,6 +207,35 @@ const STAR_FS = /* glsl */ `
   }
 `;
 
+/* Cosmos glows: galaxy cores, nebulae and the bright heart at the centre. */
+const GLOW_VS = /* glsl */ `
+  attribute vec3 aColor;
+  attribute float aSize;
+  attribute float aAlpha;
+  uniform float uProj;
+  uniform float uK;
+  varying vec3 vColor;
+  varying float vA;
+  void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = min(900.0, aSize * uProj / -mv.z);
+    vColor = aColor;
+    vA = aAlpha * uK;
+  }
+`;
+const GLOW_FS = /* glsl */ `
+  varying vec3 vColor;
+  varying float vA;
+  void main() {
+    vec2 c = gl_PointCoord - 0.5;
+    float d2 = dot(c, c) * 4.0;
+    if (d2 > 1.0) discard;
+    float a = exp(-d2 * 4.5) * (1.0 - d2) * vA;
+    gl_FragColor = vec4(vColor * a, a);
+  }
+`;
+
 const RING_FS = /* glsl */ `
   uniform vec3 uColor;
   uniform float uAlpha;
@@ -237,6 +289,8 @@ function pointsMaterial(spin = false) {
         uMatterK: { value: 1 },
         uBodyK: { value: 1 },
         uSpin: { value: 0 },
+        uCosmos: { value: 0 },
+        uOrigin: { value: new THREE.Vector3() },
       },
     }),
   );
@@ -331,6 +385,21 @@ export class BrainScene {
   );
   private cosmosCur = 0;
   private timeNow = 0;
+  private glows?: THREE.Points;
+  private glowGeo?: THREE.BufferGeometry;
+  private glowMat = additive(
+    new THREE.ShaderMaterial({
+      vertexShader: GLOW_VS,
+      fragmentShader: GLOW_FS,
+      uniforms: { uProj: { value: 500 }, uK: { value: 0 } },
+    }),
+  );
+  private shooter?: THREE.LineSegments;
+  private shooterMat = additive(
+    new THREE.ShaderMaterial({ vertexShader: LINE_VS, fragmentShader: LINE_FS, uniforms: { uOpacity: { value: 0 } } }),
+  );
+  private shot: { p: THREE.Vector3; v: THREE.Vector3; age: number; life: number } | null = null;
+  private nextShot = 4;
 
   private ring: THREE.Points;
   private ringMat = additive(
@@ -623,6 +692,8 @@ export class BrainScene {
     fromA.needsUpdate = true;
     this.layout = layout;
     this.applySpin();
+    this.buildGlows();
+    if (layout.spin) (this.recMat.uniforms.uOrigin.value as THREE.Vector3).set(...layout.spin.origin);
     this.buildScaffold();
     this.updateFrameDist();
     if (this.view.form > 0.5 && (!prev || prev.frame?.cx !== layout.frame?.cx || prev.frame?.w !== layout.frame?.w)) this.home();
@@ -662,6 +733,9 @@ export class BrainScene {
     if (sel != null) add(sel, 1);
     if (hov != null && hov !== sel) add(hov, 0.6);
     if (!out.length && this.view.focusBrain && this.formCur < 0.5) for (const h of this.hubs) add(h, 0.55);
+    // the cosmic web: streams between the sections that link to each other most
+    const fil = this.layout?.cosmos?.filaments;
+    if (!out.length && fil && this.formCur > 0.5) for (const x of fil) if (this.noteVis[x.a] && this.noteVis[x.b]) out.push({ a: x.a, b: x.b, w: x.w });
     return out.slice(0, BrainScene.TRACT_LINKS);
   }
 
@@ -717,6 +791,138 @@ export class BrainScene {
     g.setAttribute("aGalC", new THREE.BufferAttribute(new Float32Array(P * 3), 3));
     g.setAttribute("aGalA", new THREE.BufferAttribute(new Float32Array(P * 3), 3));
     g.setAttribute("aGalS", new THREE.BufferAttribute(new Float32Array(P), 1));
+    g.setAttribute("aGalO", new THREE.BufferAttribute(new Float32Array(P), 1));
+  }
+
+  /** Where a cosmos point at `p` is at time t (spin about its galaxy, then orbit the centre), written into `out`. */
+  private cosmosMove(p: ArrayLike<number>, gi: number, th: number, ph: number, out: number[]) {
+    const sp = this.layout!.spin!;
+    let x = p[0], y = p[1], z = p[2];
+    if (gi >= 0) {
+      const cx = sp.centre[gi * 3], cy = sp.centre[gi * 3 + 1], cz = sp.centre[gi * 3 + 2];
+      const kx = sp.axis[gi * 3], ky = sp.axis[gi * 3 + 1], kz = sp.axis[gi * 3 + 2];
+      const dx = x - cx, dy = y - cy, dz = z - cz;
+      const c = Math.cos(th), sn = Math.sin(th), dot = kx * dx + ky * dy + kz * dz;
+      x = cx + dx * c + (ky * dz - kz * dy) * sn + kx * dot * (1 - c);
+      y = cy + dy * c + (kz * dx - kx * dz) * sn + ky * dot * (1 - c);
+      z = cz + dz * c + (kx * dy - ky * dx) * sn + kz * dot * (1 - c);
+      const [ox, , oz] = sp.origin;
+      const ux = x - ox, uz = z - oz, cp = Math.cos(ph), sp2 = Math.sin(ph);
+      x = ox + ux * cp + uz * sp2;
+      z = oz - ux * sp2 + uz * cp;
+    }
+    out[0] = x;
+    out[1] = y;
+    out[2] = z;
+  }
+
+  private buildGlows() {
+    this.glowGeo?.dispose();
+    if (this.glows) this.root.remove(this.glows);
+    this.glows = undefined;
+    this.glowGeo = undefined;
+    const cos = this.layout?.cosmos;
+    if (!cos) return;
+    const G = cos.glows.length;
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(G * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(G * 3), 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute("aSize", new THREE.BufferAttribute(Float32Array.from(cos.glows, (x) => x.size), 1));
+    g.setAttribute("aAlpha", new THREE.BufferAttribute(new Float32Array(G), 1).setUsage(THREE.DynamicDrawUsage));
+    this.glowGeo = g;
+    this.glows = new THREE.Points(g, this.glowMat);
+    this.glows.frustumCulled = false;
+    this.glows.renderOrder = 0;
+    this.root.add(this.glows);
+  }
+
+  private tmp3 = [0, 0, 0];
+  private updateGlows() {
+    const cos = this.layout?.cosmos;
+    const sp = this.layout?.spin;
+    const g = this.glowGeo;
+    if (!cos || !sp || !g || !this.glows) return;
+    this.glows.visible = this.cosmosCur > 0.01;
+    if (!this.glows.visible) return;
+    const P = g.getAttribute("position") as THREE.BufferAttribute;
+    const C = g.getAttribute("aColor") as THREE.BufferAttribute;
+    const A = g.getAttribute("aAlpha") as THREE.BufferAttribute;
+    const pa = P.array as Float32Array;
+    const ca = C.array as Float32Array;
+    const aa = A.array as Float32Array;
+    const f = this.formCur;
+    const lit = this.noteLit;
+    cos.glows.forEach((gl, k) => {
+      const th = gl.gal >= 0 ? sp.speed[gl.gal] * this.timeNow * f : 0;
+      const ph = gl.gal >= 0 ? sp.orbit[gl.gal] * this.timeNow * f : 0;
+      this.cosmosMove(gl.pos, gl.gal, th, ph, this.tmp3);
+      pa[k * 3] = this.tmp3[0];
+      pa[k * 3 + 1] = this.tmp3[1];
+      pa[k * 3 + 2] = this.tmp3[2];
+      const n = gl.note;
+      const rgb = n >= 0 && this.noteRgb.length ? [this.noteRgb[n * 3], this.noteRgb[n * 3 + 1], this.noteRgb[n * 3 + 2]] : [1, 0.94, 0.84];
+      ca[k * 3] = rgb[0] * 0.8 + 0.2;
+      ca[k * 3 + 1] = rgb[1] * 0.8 + 0.2;
+      ca[k * 3 + 2] = rgb[2] * 0.8 + 0.2;
+      // when something is lit, the galaxies it is not in fade back
+      const dim = lit && n >= 0 && !lit[n] ? 1 - 0.75 * this.hasLitCur : 1;
+      aa[k] = gl.alpha * dim;
+    });
+    P.needsUpdate = true;
+    C.needsUpdate = true;
+    A.needsUpdate = true;
+  }
+
+  private updateShooter(dt: number) {
+    if (!this.shooter) {
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3).setUsage(THREE.DynamicDrawUsage));
+      g.setAttribute("color", new THREE.BufferAttribute(new Float32Array([1, 1, 1, 0, 0, 0]), 3));
+      this.shooter = new THREE.LineSegments(g, this.shooterMat);
+      this.shooter.frustumCulled = false;
+      this.scene.add(this.shooter);
+    }
+    const on = this.cosmosCur > 0.5 && !this.reduced;
+    if (!on) {
+      this.shooter.visible = false;
+      this.shot = null;
+      return;
+    }
+    this.nextShot -= dt;
+    if (!this.shot && this.nextShot <= 0) {
+      // somewhere in front of the camera, crossing its view
+      const fwd = this.controls.target.clone().sub(this.camera.position).normalize();
+      const right = new THREE.Vector3().crossVectors(fwd, this.camera.up).normalize();
+      const up = new THREE.Vector3().crossVectors(right, fwd);
+      const dist = this.camera.position.distanceTo(this.controls.target);
+      const p = this.camera.position
+        .clone()
+        .addScaledVector(fwd, dist * (1.3 + Math.random() * 0.8))
+        .addScaledVector(right, (Math.random() - 0.5) * dist * 1.2)
+        .addScaledVector(up, (0.15 + Math.random() * 0.45) * dist);
+      const v = right.multiplyScalar(Math.random() < 0.5 ? -1 : 1).addScaledVector(up, -0.35 - Math.random() * 0.4).normalize().multiplyScalar(dist * 0.9);
+      this.shot = { p, v, age: 0, life: 0.9 + Math.random() * 0.5 };
+      this.nextShot = 3.5 + Math.random() * 5;
+    }
+    const s = this.shot;
+    if (!s) {
+      this.shooter.visible = false;
+      return;
+    }
+    s.age += dt;
+    if (s.age > s.life) {
+      this.shot = null;
+      this.shooter.visible = false;
+      return;
+    }
+    const head = s.p.clone().addScaledVector(s.v, s.age);
+    const tail = head.clone().addScaledVector(s.v, -0.22);
+    const pos = this.shooter.geometry.getAttribute("position") as THREE.BufferAttribute;
+    (pos.array as Float32Array).set([head.x, head.y, head.z, tail.x, tail.y, tail.z]);
+    pos.needsUpdate = true;
+    const k = s.age / s.life;
+    this.shooterMat.uniforms.uOpacity.value = Math.sin(Math.PI * k) * 0.9 * this.cosmosCur;
+    this.shooter.visible = true;
   }
 
   private buildStars() {
@@ -756,6 +962,7 @@ export class BrainScene {
     const C = new Float32Array(P * 3);
     const A = new Float32Array(P * 3);
     const S = new Float32Array(P);
+    const O = new Float32Array(P);
     if (sp) {
       for (let k = 0; k < P; k++) {
         const gi = sp.recGal[k];
@@ -767,11 +974,13 @@ export class BrainScene {
         A[k * 3 + 1] = sp.axis[gi * 3 + 1];
         A[k * 3 + 2] = sp.axis[gi * 3 + 2];
         S[k] = sp.speed[gi];
+        O[k] = sp.orbit[gi];
       }
     }
     g.setAttribute("aGalC", new THREE.BufferAttribute(C, 3));
     g.setAttribute("aGalA", new THREE.BufferAttribute(A, 3));
     g.setAttribute("aGalS", new THREE.BufferAttribute(S, 1));
+    g.setAttribute("aGalO", new THREE.BufferAttribute(O, 1));
   }
 
   /** Pixels on the left covered by a panel: the view is centred in what is left. */
@@ -987,9 +1196,12 @@ export class BrainScene {
 
   /** Smoothly return to the whole figure (or the brain, in focus brain). */
   home() {
-    this.flyTo = { note: null, dist: this.homeDist() };
+    // the cosmos is seen from a little above, so its depth shows; from higher on a tall screen,
+    // where the ring of galaxies then opens up to fill the height
+    const dir = this.layoutMode() && this.layout?.cosmos ? new THREE.Vector3(0, this.camera.aspect < 1 ? 1.05 : 0.42, 1).normalize() : undefined;
+    this.flyTo = { note: null, dist: this.homeDist(), dir };
   }
-  private flyTo: { note: number | null; dist: number } | null = null;
+  private flyTo: { note: number | null; dist: number; dir?: THREE.Vector3 } | null = null;
 
   /** Point the camera at a world position from a distance (used by tests and tours). */
   lookAt(x: number, y: number, z: number, dist: number, azimuth = 0) {
@@ -1025,7 +1237,7 @@ export class BrainScene {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
     });
-    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat, this.tractMat, this.starMat].forEach((m) => m.dispose());
+    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat, this.tractMat, this.starMat, this.glowMat, this.shooterMat].forEach((m) => m.dispose());
     this.renderer.dispose();
     el.remove();
     this.labelEls.forEach((e) => e.remove());
@@ -1116,15 +1328,8 @@ export class BrainScene {
       const lay = [0, 1, 2].map((c) => nf[j * 3 + c] + (gr.noteLayout[j * 3 + c] - nf[j * 3 + c]) * m);
       const gi = sp ? sp.noteGal[j] : -1;
       if (sp && gi >= 0 && f > 0) {
-        // the same turn the shader gives the stars, so notes stay on their arms
-        const th = sp.speed[gi] * this.timeNow * f;
-        const cx = sp.centre[gi * 3], cy = sp.centre[gi * 3 + 1], cz = sp.centre[gi * 3 + 2];
-        const kx = sp.axis[gi * 3], ky = sp.axis[gi * 3 + 1], kz = sp.axis[gi * 3 + 2];
-        const dx = lay[0] - cx, dy = lay[1] - cy, dz = lay[2] - cz;
-        const c = Math.cos(th), sn = Math.sin(th), dot = kx * dx + ky * dy + kz * dz;
-        lay[0] = cx + dx * c + (ky * dz - kz * dy) * sn + kx * dot * (1 - c);
-        lay[1] = cy + dy * c + (kz * dx - kx * dz) * sn + ky * dot * (1 - c);
-        lay[2] = cz + dz * c + (kx * dy - ky * dx) * sn + kz * dot * (1 - c);
+        // the same spin and orbit the shader gives the stars, so notes stay on their arms
+        this.cosmosMove(lay, gi, sp.speed[gi] * this.timeNow * f, sp.orbit[gi] * this.timeNow * f, lay);
       }
       for (let c = 0; c < 3; c++) {
         const i = j * 3 + c;
@@ -1231,6 +1436,7 @@ export class BrainScene {
     this.camera.updateProjectionMatrix();
     const px = this.renderer.getPixelRatio();
     for (const m of [this.notesMat, this.recMat, this.ghostMat, this.ringMat, this.tractMat, this.starMat]) m.uniforms.uPx.value = px;
+    this.glowMat.uniforms.uProj.value = (h * px) / (2 * Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2)));
   }
 
   private loop = () => {
@@ -1246,6 +1452,9 @@ export class BrainScene {
     this.recMat.uniforms.uSpin.value = this.formCur;
     this.cosmosCur = ease(this.cosmosCur, this.layout?.spin && this.view.form > 0.5 ? 1 : 0, dt, 2);
     this.starMat.uniforms.uAlpha.value = this.cosmosCur;
+    this.recMat.uniforms.uCosmos.value = this.cosmosCur;
+    this.glowMat.uniforms.uK.value = this.cosmosCur;
+    this.recMat.uniforms.uScale.value = (this.view.pointSize / 100) * (1 + 0.2 * this.cosmosCur);
     this.starMat.uniforms.uTime.value = t;
     if (this.stars) this.stars.visible = this.cosmosCur > 0.01;
 
@@ -1292,7 +1501,8 @@ export class BrainScene {
     // charts keep links faint; the tree hides them until something is lit
     const k = this.layout?.key ?? "";
     const quiet = k.startsWith("tree") || k.startsWith("answer:flow") || k.startsWith("cosmos") ? 0.95 * (1 - this.hasLitCur) : 0.6;
-    const chartK = this.layout?.flat || k.startsWith("cosmos") ? 1 - quiet * this.formCur : 1;
+    // in the cosmos a lit galaxy's links are kept softer, so its stars still show through
+    const chartK = this.layout?.flat || k.startsWith("cosmos") ? (1 - quiet * this.formCur) * (k.startsWith("cosmos") ? 1 - 0.45 * this.hasLitCur * this.formCur : 1) : 1;
     this.linesMat.uniforms.uOpacity.value = (0.1 + 0.08 * this.formCur) * (1 + this.hasLitCur * 1.4) * chartK;
     this.scaffoldMat.uniforms.uOpacity.value = 0.42 * Math.max(0, this.formCur - 0.4) / 0.6 * Math.min(1, this.morphCur * 1.5);
     if (this.scaffold) this.scaffold.visible = this.formCur > 0.4;
@@ -1308,9 +1518,17 @@ export class BrainScene {
       this.controls.target.lerp(ft, Math.min(1, dt * 3));
       const off = this.camera.position.clone().sub(this.controls.target);
       const len = off.length();
-      off.setLength(len + (f.dist - len) * Math.min(1, dt * 2.5));
+      const nl = len + (f.dist - len) * Math.min(1, dt * 2.5);
+      let turned = true;
+      if (f.dir) {
+        const cur = off.clone().normalize();
+        cur.lerp(f.dir, Math.min(1, dt * 1.8)).normalize();
+        turned = cur.angleTo(f.dir) < 0.01;
+        off.copy(cur);
+      }
+      off.setLength(nl);
       this.camera.position.copy(this.controls.target).add(off);
-      if (this.controls.target.distanceTo(ft) < 0.01 && Math.abs(len - f.dist) < 0.02) this.flyTo = null;
+      if (this.controls.target.distanceTo(ft) < 0.01 && Math.abs(len - f.dist) < 0.02 && turned) this.flyTo = null;
     } else if (formMoving && !this.userTurning) {
       this.controls.target.y += (ty - this.controls.target.y) * Math.min(1, dt * 3);
     }
@@ -1326,6 +1544,8 @@ export class BrainScene {
     }
     this.controls.update(dt);
 
+    this.updateGlows();
+    this.updateShooter(dt);
     this.updateRing(dt);
     this.updateLabels();
     this.renderer.render(this.scene, this.camera);
@@ -1366,7 +1586,13 @@ export class BrainScene {
       let ok = true;
       if (l.pos) {
         if (this.formCur < 0.6) ok = false;
-        this.v3.set(l.pos[0], l.pos[1], l.pos[2]);
+        const sp = this.layout?.spin;
+        if (l.gal != null && sp) {
+          const ph = sp.orbit[l.gal] * this.timeNow * this.formCur;
+          const [ox, , oz] = sp.origin;
+          const ux = l.pos[0] - ox, uz = l.pos[2] - oz;
+          this.v3.set(ox + ux * Math.cos(ph) + uz * Math.sin(ph), l.pos[1], oz - ux * Math.sin(ph) + uz * Math.cos(ph));
+        } else this.v3.set(l.pos[0], l.pos[1], l.pos[2]);
       } else if (l.note != null) {
         if (!this.noteVis[l.note]) ok = false;
         this.v3.set(this.notePosCur[l.note * 3], this.notePosCur[l.note * 3 + 1], this.notePosCur[l.note * 3 + 2]);

@@ -1,4 +1,5 @@
 import type { GroupBy, Model } from "@/lib/brain";
+import type { CosmosExtras } from "./cosmos";
 
 /* ───────────────────────────────────────────────────────────────────────────
  * Real anatomy. The points come from /anatomy/atlas.bin (Z-Anatomy and
@@ -61,6 +62,8 @@ export interface LayoutLabel {
   pos: [number, number, number];
   kind: LabelKind;
   group?: number;
+  /** Cosmos: the galaxy the label orbits with. */
+  gal?: number;
 }
 
 /** Where every note and every record point goes when Form is at Layout. */
@@ -76,7 +79,18 @@ export interface Layout {
   /** Guide lines: pairs of points, each segment coloured by a group (-1 for white). */
   scaffold: { pos: Float32Array; group: Int32Array } | null;
   /** Cosmos: groups of points that turn on their own axis (per group: centre, axis, rad/s). */
-  spin?: { centre: Float32Array; axis: Float32Array; speed: Float32Array; noteGal: Int32Array; recGal: Int32Array };
+  spin?: {
+    centre: Float32Array;
+    axis: Float32Array;
+    speed: Float32Array;
+    /** Per group: rad/s round `origin`, about the vertical. */
+    orbit: Float32Array;
+    origin: [number, number, number];
+    noteGal: Int32Array;
+    recGal: Int32Array;
+  };
+  /** Cosmos only: glows and filaments. */
+  cosmos?: CosmosExtras;
 }
 
 /** @deprecated use Layout */

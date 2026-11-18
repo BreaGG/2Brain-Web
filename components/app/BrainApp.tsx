@@ -305,7 +305,9 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
   const labels = useMemo<SceneLabel[]>(() => {
     if (settings.labels === "none") return [];
     const out: SceneLabel[] = [];
-    if (settings.labels === "all") {
+    // in the cosmos every folder is a galaxy that carries its own name
+    const named = (gb: string) => settings.cosmos && gb === "folder";
+    if (settings.labels === "all" && !named(settings.groupBy)) {
       grouping.list.forEach((g, gi) => {
         if (!(settings.hideUnsorted && g.unsorted)) out.push({ text: g.label, group: gi });
       });
@@ -314,13 +316,13 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
       const n = model.notes[focus.i];
       out.push({ text: n.title, note: focus.i, strong: true });
       if (settings.labels === "lit") [...new Set([...n.out, ...n.in])].slice(0, 10).forEach((j) => out.push({ text: model.notes[j].title, note: j }));
-    } else if (focus.kind === "groups" && settings.labels === "lit") {
+    } else if (focus.kind === "groups" && settings.labels === "lit" && !named(focus.groupBy)) {
       for (const k of focus.keys) out.push({ text: model.groups[focus.groupBy].list[k].label, group: focus.groupBy === settings.groupBy ? k : undefined, strong: true });
     } else if (focus.kind === "set" && settings.labels === "lit") {
       focus.ids.slice(0, 14).forEach((j) => out.push({ text: model.notes[j].title, note: j }));
     }
     return out.filter((l) => l.note != null || l.group != null);
-  }, [settings.labels, settings.hideUnsorted, grouping, focus, model]);
+  }, [settings.labels, settings.hideUnsorted, settings.cosmos, settings.groupBy, grouping, focus, model]);
 
   /* ── theme ────────────────────────────────────────────────────────────── */
   const theme = THEMES.find((t) => t.id === settings.theme) ?? THEMES[0];

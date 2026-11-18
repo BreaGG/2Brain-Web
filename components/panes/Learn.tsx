@@ -155,7 +155,7 @@ export default function Learn({ accent, onClose }: PaneProps) {
           <p>Drag to turn the brain and right-drag to move it. On a trackpad, slide two fingers to turn it and pinch to zoom; a mouse wheel zooms. Point at a dot to see its note; click to open it. Opening the general index lights the whole spinal column, the core of the wiki.</p>
           <p style={{ marginTop: 8 }}>Double-click anywhere on the brain to clear what is lit. Esc closes what opened last, one at a time.</p>
           <p style={{ marginTop: 8 }}>
-            <b>⌘K</b> searches notes and runs commands, <b>/</b> finds in the brain, <b>V</b> opens View, <b>B</b> focuses the brain, setting the body aside, and <b>C</b> turns the brain into a cosmos where every section of the wiki is a galaxy.
+            <b>⌘K</b> searches notes and runs commands, <b>/</b> finds in the brain, <b>V</b> opens View, <b>B</b> focuses the brain, setting the body aside, and <b>C</b> turns the brain into a cosmos where every section of the wiki is a galaxy, turning on itself round the general index.
           </p>
         </Sect>
 
