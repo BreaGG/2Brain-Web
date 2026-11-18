@@ -20,7 +20,8 @@ type IconName =
   | "out"
   | "expand"
   | "menu"
-  | "copy";
+  | "copy"
+  | "galaxy";
 
 export function Icon({ name, size = 14, style }: { name: IconName; size?: number; style?: CSSProperties }) {
   const p = {
@@ -129,6 +130,14 @@ export function Icon({ name, size = 14, style }: { name: IconName; size?: number
       return (
         <svg {...p}>
           <path d="M2 4.5h12M2 8h12M2 11.5h12" />
+        </svg>
+      );
+    case "galaxy":
+      return (
+        <svg {...p}>
+          <path d="M8 8c0-1.6 1.6-2.4 3-1.6 1.8 1 1.6 3.9-.5 5-2.7 1.4-6-.4-6.4-3.4C3.7 4.6 7 1.9 10.6 2.6" />
+          <path d="M8 8c0 1.6-1.6 2.4-3 1.6-1.8-1-1.6-3.9.5-5 2.7-1.4 6 .4 6.4 3.4.4 3.4-2.9 6.1-6.5 5.4" />
+          <circle cx="8" cy="8" r="0.9" fill="currentColor" stroke="none" />
         </svg>
       );
     case "copy":

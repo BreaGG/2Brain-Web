@@ -87,6 +87,7 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
             />
           </div>
           <SwitchRow label="Focus brain" on={s.focusBrain} onChange={(v) => set("focusBrain", v)} />
+          <SwitchRow label="Cosmos" on={s.cosmos} onChange={(v) => set("cosmos", v)} />
           <SwitchRow label="Table builder" on={s.tableBuilder} onChange={(v) => set("tableBuilder", v)} />
         </section>
 
