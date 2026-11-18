@@ -467,6 +467,12 @@ button {
 .ring-spin.fast {
   animation-duration: 1.2s;
 }
+.rail-status span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
 .rail-status .sync {
   padding: 2px 7px;
   border: 1px solid var(--hair);

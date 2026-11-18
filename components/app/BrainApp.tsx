@@ -56,12 +56,22 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
       setSettings((s) => {
         const next = { ...s, [k]: v };
         // the table builder is drawn at Layout: turning it on slides Form across, off slides it back
-        if (k === "tableBuilder") next.form = v ? 1 : 0;
+        if (k === "tableBuilder") {
+          next.form = v ? 1 : 0;
+          if (v) next.cosmos = false;
+        }
+        // the cosmos is a layout too, and takes the place of the table builder
+        if (k === "cosmos") {
+          next.form = v ? 1 : 0;
+          if (v) next.tableBuilder = false;
+        }
         return next;
       }),
     [],
   );
   const resetSettings = useCallback(() => setSettings(DEFAULT_SETTINGS), []);
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const replaceSettings = useCallback((next: Settings) => setSettings(next), []);
 
   /* ── grouping + colours ───────────────────────────────────────────────── */
@@ -245,6 +255,8 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
         setVizOpen((v) => !v);
       } else if (e.key === "b" && !e.metaKey && !e.ctrlKey) {
         setSettings((st) => ({ ...st, focusBrain: !st.focusBrain }));
+      } else if (e.key === "c" && !e.metaKey && !e.ctrlKey) {
+        set("cosmos", !settingsRef.current.cosmos);
       }
     };
     window.addEventListener("keydown", onKey);
@@ -372,6 +384,9 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
               onClick={() => set("focusBrain", !settings.focusBrain)}
             >
               <BrainMark size={13} />
+            </button>
+            <button type="button" className="icon-button boxed" aria-pressed={settings.cosmos} aria-label="Cosmos" onClick={() => set("cosmos", !settings.cosmos)}>
+              <Icon name="galaxy" size={14} />
             </button>
             <button type="button" className="icon-button boxed" aria-expanded={vizOpen} aria-label="View settings" onClick={() => { setRailOpen(false); setVizOpen((v) => !v); }}>
               <Icon name="sliders" size={12} />

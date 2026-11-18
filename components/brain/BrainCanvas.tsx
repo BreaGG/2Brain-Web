@@ -6,6 +6,7 @@ import type { Settings } from "@/lib/settings";
 import { buildAnatomy, buildGrouped, loadAtlas, type Atlas } from "./anatomy";
 import { buildForm, type FormSpec } from "./forms";
 import { buildTree } from "./tree";
+import { buildCosmos } from "./cosmos";
 import { BrainScene, type SceneLabel } from "./scene";
 
 export interface BrainCanvasProps {
@@ -64,16 +65,27 @@ export default function BrainCanvas(p: BrainCanvasProps) {
 
   const newestFirst = p.settings.order === "newest";
   const anat = useMemo(() => (atlas ? buildAnatomy(p.model, atlas, { small, newestFirst }) : null), [p.model, atlas, small, newestFirst]);
+  // the cosmos comes on at once; going off, it stays laid out until the points are home
+  const [cosmos, setCosmos] = useState(p.settings.cosmos);
+  useEffect(() => {
+    if (p.settings.cosmos) return setCosmos(true);
+    const t = setTimeout(() => setCosmos(false), 1400);
+    return () => clearTimeout(t);
+  }, [p.settings.cosmos]);
+  const folderColours = p.groupBy === "folder";
+
   const grouped = useMemo(
     () =>
       !anat
         ? null
-        : p.table
+        : cosmos
+          ? buildCosmos(p.model, anat, { labelColours: folderColours })
+          : p.table
           ? buildForm(p.model, anat, p.table)
           : p.settings.groupLayout === "tree"
             ? buildTree(p.model, anat, p.model.groups[p.groupBy])
             : buildGrouped(p.model, p.groupBy, anat),
-    [p.model, p.groupBy, anat, p.table, p.settings.groupLayout],
+    [p.model, p.groupBy, anat, p.table, p.settings.groupLayout, cosmos, folderColours],
   );
 
   // mount

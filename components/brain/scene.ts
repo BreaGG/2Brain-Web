@@ -54,6 +54,12 @@ const POINT_VS = /* glsl */ `
   attribute float aVis;
   attribute float aSplitX;
   attribute float aMatter;
+#ifdef SPIN
+  attribute vec3 aGalC;
+  attribute vec3 aGalA;
+  attribute float aGalS;
+  uniform float uSpin;
+#endif
   uniform float uSplit;
   uniform float uMatterK;
   uniform float uBodyK;
@@ -70,6 +76,12 @@ const POINT_VS = /* glsl */ `
   void main() {
     float m = smoothstep(0.0, 1.0, clamp(uMorph * 1.35 - aOrder * 0.35, 0.0, 1.0));
     vec3 lay = mix(aFrom, aLayout, m);
+#ifdef SPIN
+    // cosmos: every galaxy turns on its own axis (Rodrigues' rotation)
+    float th = aGalS * uTime * uSpin;
+    vec3 d = lay - aGalC;
+    lay = aGalC + d * cos(th) + cross(aGalA, d) * sin(th) + aGalA * dot(aGalA, d) * (1.0 - cos(th));
+#endif
     vec3 p = mix(position + vec3(aSplitX * uSplit, 0.0, 0.0), lay, uForm);
     p.x += sin(uTime * 0.6 + aOrder * 61.0) * 0.006;
     p.y += cos(uTime * 0.5 + aOrder * 47.0) * 0.006;
@@ -147,6 +159,31 @@ const TRACT_VS = /* glsl */ `
   }
 `;
 
+/* The cosmos's background: far stars that twinkle. */
+const STAR_VS = /* glsl */ `
+  attribute float aSize;
+  attribute float aSeed;
+  uniform float uPx;
+  uniform float uTime;
+  uniform float uAlpha;
+  varying float vA;
+  void main() {
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mv;
+    gl_PointSize = aSize * uPx;
+    vA = uAlpha * (0.45 + 0.55 * sin(uTime * (0.6 + aSeed) + aSeed * 40.0) * 0.5 + 0.275);
+  }
+`;
+const STAR_FS = /* glsl */ `
+  varying float vA;
+  void main() {
+    float d = length(gl_PointCoord - 0.5) * 2.0;
+    if (d > 1.0) discard;
+    float a = (1.0 - d) * (1.0 - d) * vA;
+    gl_FragColor = vec4(vec3(0.85, 0.9, 1.0) * a, a);
+  }
+`;
+
 const RING_FS = /* glsl */ `
   uniform vec3 uColor;
   uniform float uAlpha;
@@ -181,9 +218,10 @@ function additive(mat: THREE.ShaderMaterial) {
   return mat;
 }
 
-function pointsMaterial() {
+function pointsMaterial(spin = false) {
   return additive(
     new THREE.ShaderMaterial({
+      defines: spin ? { SPIN: 1 } : {},
       vertexShader: POINT_VS,
       fragmentShader: POINT_FS,
       uniforms: {
@@ -198,6 +236,7 @@ function pointsMaterial() {
         uSplit: { value: 0 },
         uMatterK: { value: 1 },
         uBodyK: { value: 1 },
+        uSpin: { value: 0 },
       },
     }),
   );
@@ -246,7 +285,7 @@ export class BrainScene {
 
   private rec?: THREE.Points;
   private recGeo?: THREE.BufferGeometry;
-  private recMat = pointsMaterial();
+  private recMat = pointsMaterial(true);
 
   private fibres?: THREE.LineSegments;
   private fibreGeo?: THREE.BufferGeometry;
@@ -285,6 +324,13 @@ export class BrainScene {
   private tractKey = "";
   private nbrs: number[][] = [];
   private hubs: number[] = [];
+
+  private stars?: THREE.Points;
+  private starMat = additive(
+    new THREE.ShaderMaterial({ vertexShader: STAR_VS, fragmentShader: STAR_FS, uniforms: { uPx: { value: 1 }, uTime: { value: 0 }, uAlpha: { value: 0 } } }),
+  );
+  private cosmosCur = 0;
+  private timeNow = 0;
 
   private ring: THREE.Points;
   private ringMat = additive(
@@ -370,6 +416,7 @@ export class BrainScene {
     this.ring = new THREE.Points(ringGeo, this.ringMat);
     this.ring.frustumCulled = false;
     this.root.add(this.ring);
+    this.buildStars();
 
     const el = this.renderer.domElement;
     el.addEventListener("pointermove", this.onMove);
@@ -452,6 +499,7 @@ export class BrainScene {
     rg.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, -7, 0), 12);
     this.recGeo = rg;
     if (this.rec) this.root.remove(this.rec);
+    this.applySpinTo(rg, P);
     this.rec = new THREE.Points(rg, this.recMat);
     this.rec.frustumCulled = false;
     this.rec.renderOrder = 1;
@@ -574,6 +622,7 @@ export class BrainScene {
     toA.needsUpdate = true;
     fromA.needsUpdate = true;
     this.layout = layout;
+    this.applySpin();
     this.buildScaffold();
     this.updateFrameDist();
     if (this.view.form > 0.5 && (!prev || prev.frame?.cx !== layout.frame?.cx || prev.frame?.w !== layout.frame?.w)) this.home();
@@ -662,6 +711,67 @@ export class BrainScene {
       }
     });
     for (const attr of [A, B, C, CA, CB, Wt]) attr.needsUpdate = true;
+  }
+
+  private applySpinTo(g: THREE.BufferGeometry, P: number) {
+    g.setAttribute("aGalC", new THREE.BufferAttribute(new Float32Array(P * 3), 3));
+    g.setAttribute("aGalA", new THREE.BufferAttribute(new Float32Array(P * 3), 3));
+    g.setAttribute("aGalS", new THREE.BufferAttribute(new Float32Array(P), 1));
+  }
+
+  private buildStars() {
+    const N = 2600;
+    const pos = new Float32Array(N * 3);
+    const size = new Float32Array(N);
+    const seed = new Float32Array(N);
+    let x = 7;
+    const r = () => ((x = (x * 16807) % 2147483647) / 2147483647);
+    for (let i = 0; i < N; i++) {
+      const u = r() * 2 - 1;
+      const a = r() * Math.PI * 2;
+      const s = Math.sqrt(1 - u * u);
+      const rad = 40 + r() * 50;
+      pos.set([Math.cos(a) * s * rad, FRAME_CY + u * rad, Math.sin(a) * s * rad], i * 3);
+      size[i] = 0.8 + Math.pow(r(), 6) * 2.6;
+      seed[i] = r();
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("aSize", new THREE.BufferAttribute(size, 1));
+    g.setAttribute("aSeed", new THREE.BufferAttribute(seed, 1));
+    this.stars = new THREE.Points(g, this.starMat);
+    this.stars.frustumCulled = false;
+    this.stars.renderOrder = -1;
+    this.stars.visible = false;
+    this.scene.add(this.stars);
+  }
+
+  /** Spin attributes of the record for the current layout (zero when it does not spin). */
+  private applySpin() {
+    const anat = this.anat;
+    const g = this.recGeo;
+    if (!anat || !g) return;
+    const P = anat.recCount;
+    const sp = this.layout?.spin;
+    const C = new Float32Array(P * 3);
+    const A = new Float32Array(P * 3);
+    const S = new Float32Array(P);
+    if (sp) {
+      for (let k = 0; k < P; k++) {
+        const gi = sp.recGal[k];
+        if (gi < 0) continue;
+        C[k * 3] = sp.centre[gi * 3];
+        C[k * 3 + 1] = sp.centre[gi * 3 + 1];
+        C[k * 3 + 2] = sp.centre[gi * 3 + 2];
+        A[k * 3] = sp.axis[gi * 3];
+        A[k * 3 + 1] = sp.axis[gi * 3 + 1];
+        A[k * 3 + 2] = sp.axis[gi * 3 + 2];
+        S[k] = sp.speed[gi];
+      }
+    }
+    g.setAttribute("aGalC", new THREE.BufferAttribute(C, 3));
+    g.setAttribute("aGalA", new THREE.BufferAttribute(A, 3));
+    g.setAttribute("aGalS", new THREE.BufferAttribute(S, 1));
   }
 
   /** Pixels on the left covered by a panel: the view is centred in what is left. */
@@ -915,7 +1025,7 @@ export class BrainScene {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
     });
-    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat, this.tractMat].forEach((m) => m.dispose());
+    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat, this.tractMat, this.starMat].forEach((m) => m.dispose());
     this.renderer.dispose();
     el.remove();
     this.labelEls.forEach((e) => e.remove());
@@ -1001,10 +1111,26 @@ export class BrainScene {
     const mm = this.morphCur;
     const m = mm * mm * (3 - 2 * mm);
     const nf = this.noteFrom.length === gr.noteLayout.length ? this.noteFrom : gr.noteLayout;
-    for (let i = 0; i < anat.n * 3; i++) {
-      const a = anat.notePos[i] + (anat.noteSplit[i] - anat.notePos[i]) * s;
-      const lay = nf[i] + (gr.noteLayout[i] - nf[i]) * m;
-      P[i] = a + (lay - a) * f;
+    const sp = gr.spin;
+    for (let j = 0; j < anat.n; j++) {
+      const lay = [0, 1, 2].map((c) => nf[j * 3 + c] + (gr.noteLayout[j * 3 + c] - nf[j * 3 + c]) * m);
+      const gi = sp ? sp.noteGal[j] : -1;
+      if (sp && gi >= 0 && f > 0) {
+        // the same turn the shader gives the stars, so notes stay on their arms
+        const th = sp.speed[gi] * this.timeNow * f;
+        const cx = sp.centre[gi * 3], cy = sp.centre[gi * 3 + 1], cz = sp.centre[gi * 3 + 2];
+        const kx = sp.axis[gi * 3], ky = sp.axis[gi * 3 + 1], kz = sp.axis[gi * 3 + 2];
+        const dx = lay[0] - cx, dy = lay[1] - cy, dz = lay[2] - cz;
+        const c = Math.cos(th), sn = Math.sin(th), dot = kx * dx + ky * dy + kz * dz;
+        lay[0] = cx + dx * c + (ky * dz - kz * dy) * sn + kx * dot * (1 - c);
+        lay[1] = cy + dy * c + (kz * dx - kx * dz) * sn + ky * dot * (1 - c);
+        lay[2] = cz + dz * c + (kx * dy - ky * dx) * sn + kz * dot * (1 - c);
+      }
+      for (let c = 0; c < 3; c++) {
+        const i = j * 3 + c;
+        const a = anat.notePos[i] + (anat.noteSplit[i] - anat.notePos[i]) * s;
+        P[i] = a + (lay[c] - a) * f;
+      }
     }
     (this.notesGeo.getAttribute("position") as THREE.BufferAttribute).needsUpdate = true;
     this.notesGeo.computeBoundingSphere();
@@ -1104,7 +1230,7 @@ export class BrainScene {
     this.camera.position.copy(this.controls.target).add(off);
     this.camera.updateProjectionMatrix();
     const px = this.renderer.getPixelRatio();
-    for (const m of [this.notesMat, this.recMat, this.ghostMat, this.ringMat, this.tractMat]) m.uniforms.uPx.value = px;
+    for (const m of [this.notesMat, this.recMat, this.ghostMat, this.ringMat, this.tractMat, this.starMat]) m.uniforms.uPx.value = px;
   }
 
   private loop = () => {
@@ -1114,6 +1240,14 @@ export class BrainScene {
     this.timer.update();
     const dt = Math.min(0.05, this.timer.getDelta());
     const t = this.timer.getElapsed();
+    this.timeNow = t;
+    const spinning = !!this.layout?.spin && this.formCur > 0.001;
+    if (spinning) this.notesDirty = true;
+    this.recMat.uniforms.uSpin.value = this.formCur;
+    this.cosmosCur = ease(this.cosmosCur, this.layout?.spin && this.view.form > 0.5 ? 1 : 0, dt, 2);
+    this.starMat.uniforms.uAlpha.value = this.cosmosCur;
+    this.starMat.uniforms.uTime.value = t;
+    if (this.stars) this.stars.visible = this.cosmosCur > 0.01;
 
     // eased state
     const fPrev = this.formCur;
@@ -1157,8 +1291,8 @@ export class BrainScene {
     if (this.fibres) this.fibres.visible = this.bodyCur > 0.01 && this.formCur < 0.98;
     // charts keep links faint; the tree hides them until something is lit
     const k = this.layout?.key ?? "";
-    const quiet = k.startsWith("tree") || k.startsWith("answer:flow") ? 0.95 * (1 - this.hasLitCur) : 0.6;
-    const chartK = this.layout?.flat ? 1 - quiet * this.formCur : 1;
+    const quiet = k.startsWith("tree") || k.startsWith("answer:flow") || k.startsWith("cosmos") ? 0.95 * (1 - this.hasLitCur) : 0.6;
+    const chartK = this.layout?.flat || k.startsWith("cosmos") ? 1 - quiet * this.formCur : 1;
     this.linesMat.uniforms.uOpacity.value = (0.1 + 0.08 * this.formCur) * (1 + this.hasLitCur * 1.4) * chartK;
     this.scaffoldMat.uniforms.uOpacity.value = 0.42 * Math.max(0, this.formCur - 0.4) / 0.6 * Math.min(1, this.morphCur * 1.5);
     if (this.scaffold) this.scaffold.visible = this.formCur > 0.4;

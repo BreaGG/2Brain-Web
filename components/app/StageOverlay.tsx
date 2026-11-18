@@ -37,6 +37,16 @@ export default function StageOverlay({
           <button
             type="button"
             className="icon-button boxed"
+            aria-pressed={settings.cosmos}
+            title={settings.cosmos ? "Back to the brain (C)" : "Cosmos: every section a galaxy (C)"}
+            aria-label="Cosmos"
+            onClick={() => set("cosmos", !settings.cosmos)}
+          >
+            <Icon name="galaxy" size={14} />
+          </button>
+          <button
+            type="button"
+            className="icon-button boxed"
             aria-pressed={settings.activity}
             title="Activity: when notes were written"
             aria-label="Activity"

@@ -75,6 +75,8 @@ export interface Layout {
   flat: boolean;
   /** Guide lines: pairs of points, each segment coloured by a group (-1 for white). */
   scaffold: { pos: Float32Array; group: Int32Array } | null;
+  /** Cosmos: groups of points that turn on their own axis (per group: centre, axis, rad/s). */
+  spin?: { centre: Float32Array; axis: Float32Array; speed: Float32Array; noteGal: Int32Array; recGal: Int32Array };
 }
 
 /** @deprecated use Layout */

@@ -22,6 +22,8 @@ export interface Settings {
   tbMono: boolean;
   tbCounts: boolean;
   focusBrain: boolean;
+  /** Visual only: the brain becomes a cosmos, every section a galaxy. */
+  cosmos: boolean;
   order: RecordOrder;
   limitRotation: boolean;
   notes: boolean;
@@ -58,6 +60,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tbMono: false,
   tbCounts: false,
   focusBrain: false,
+  cosmos: false,
   order: "oldest",
   limitRotation: false,
   notes: true,

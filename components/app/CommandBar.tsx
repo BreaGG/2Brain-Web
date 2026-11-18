@@ -62,6 +62,7 @@ export default function CommandBar({
     views.push({ id: "view-add", group: "Views", title: "Add a note", sub: "How to bring something new into the record", hint: "View", run: () => openPane("add") });
     const toggles: Item[] = [
       { id: "t-form", group: "Commands", title: settings.form > 0.5 ? "Show the anatomy" : "Show the layout", sub: "Slide Form between anatomy and clusters", run: () => set("form", settings.form > 0.5 ? 0 : 1) },
+      { id: "t-cosmos", group: "Commands", title: settings.cosmos ? "Back to the brain" : "Show the cosmos", sub: "Every section of the wiki as a galaxy", hint: "C", run: () => set("cosmos", !settings.cosmos) },
       { id: "t-focus", group: "Commands", title: settings.focusBrain ? "Show the whole body" : "Focus the brain", sub: "The brain alone, without the cord and nerves", hint: "B", run: () => set("focusBrain", !settings.focusBrain) },
       { id: "t-tree", group: "Commands", title: "Show the folder tree", sub: "Every folder and note as a tree, at Layout", run: () => { set("tableBuilder", false); set("groupLayout", "tree"); set("form", 1); } },
       { id: "t-spheres", group: "Commands", title: "Show the groups as spheres", sub: "One cloud per group, at Layout", run: () => { set("tableBuilder", false); set("groupLayout", "spheres"); set("form", 1); } },
