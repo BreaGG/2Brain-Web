@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getAllPages, getRepoInfo, hasWikiSource } from "@/lib/wiki";
 import BrainApp from "@/components/app/BrainApp";
 
-export const revalidate = 300;
+export const revalidate = 60;
 
 interface Props {
   params: Promise<{ slug: string[] }>;

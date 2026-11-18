@@ -1,7 +1,7 @@
 import { getAllPages, getRepoInfo, hasWikiSource } from "@/lib/wiki";
 import BrainApp from "@/components/app/BrainApp";
 
-export const revalidate = 300;
+export const revalidate = 60;
 
 export default async function Home() {
   const pages = await getAllPages();

@@ -464,6 +464,24 @@ button {
   animation: spin 24s linear infinite;
   transform-origin: 50% 50%;
 }
+.ring-spin.fast {
+  animation-duration: 1.2s;
+}
+.rail-status .sync {
+  padding: 2px 7px;
+  border: 1px solid var(--hair);
+  font-size: 10px;
+  letter-spacing: var(--track);
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.rail-status .sync:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+.rail-status .sync:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
 @keyframes spin {
   to {
     transform: rotate(360deg);
