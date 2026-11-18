@@ -66,3 +66,16 @@ export async function writeNote(input: WriteInput): Promise<WriteResult> {
     return { ok: false, code: "github", error: "The note could not be saved. Try again in a moment." };
   }
 }
+
+let lastSync = 0;
+
+/** Fetch the wiki afresh now (the Sync button). Throttled so it cannot hammer GitHub. */
+export async function syncWiki(): Promise<{ ok: boolean; wait?: number }> {
+  const now = Date.now();
+  if (now - lastSync < 10_000) return { ok: false, wait: Math.ceil((10_000 - (now - lastSync)) / 1000) };
+  lastSync = now;
+  updateTag("wiki");
+  revalidatePath("/");
+  revalidatePath("/wiki/[...slug]", "page");
+  return { ok: true };
+}

@@ -30,6 +30,17 @@ GITHUB_TOKEN=…   # token with read access
 
 Without these variables the app shows a built-in sample wiki, so it can run locally with no setup.
 
+### Seeing changes straight away
+
+The site checks the wiki for changes every minute, and only downloads notes that are new or edited. To see a push at once:
+
+- press **Sync** at the bottom of the left rail (in **More** on a phone), or run *Sync with GitHub* from ⌘K; or
+- add a webhook to the wiki repository (**Settings → Webhooks → Add webhook**): payload URL `https://<your-site>/api/revalidate`, content type `application/json`, the secret you put in `WIKI_WEBHOOK_SECRET`, event *Just the push event*. Every push then shows up in the brain within seconds.
+
+```bash
+WIKI_WEBHOOK_SECRET=…   # any long secret, the same one you give the webhook
+```
+
 ### Writing new notes from the web
 
 **Add → Write a new note** saves a note straight to the wiki repository: the Markdown file and the line that lists it in its folder's `index.md` go in as **one commit** (a new folder also gets an index, linked from `wiki/index.md`). The note appears in the brain at once and opens.

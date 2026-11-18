@@ -65,6 +65,7 @@ export default function CommandBar({
       { id: "t-focus", group: "Commands", title: settings.focusBrain ? "Show the whole body" : "Focus the brain", sub: "The brain alone, without the cord and nerves", hint: "B", run: () => set("focusBrain", !settings.focusBrain) },
       { id: "t-tree", group: "Commands", title: "Show the folder tree", sub: "Every folder and note as a tree, at Layout", run: () => { set("tableBuilder", false); set("groupLayout", "tree"); set("form", 1); } },
       { id: "t-spheres", group: "Commands", title: "Show the groups as spheres", sub: "One cloud per group, at Layout", run: () => { set("tableBuilder", false); set("groupLayout", "spheres"); set("form", 1); } },
+      { id: "t-sync", group: "Commands", title: "Sync with GitHub", sub: "Fetch new and changed notes from the wiki now", run: () => document.querySelector<HTMLButtonElement>(".rail-status .sync")?.click() },
       { id: "t-write", group: "Commands", title: "Write a new note", sub: "Saved to your wiki on GitHub and indexed in its folder", run: () => openPane("add") },
       { id: "t-tour", group: "Commands", title: "Start the walkthrough", sub: "A guided tour of the brain, step by step", run: () => app.startTour() },
       { id: "t-demo", group: "Commands", title: app.demo ? "Show your brain" : "Show a demo brain", sub: "A sample wiki to explore without touching yours", run: () => app.setDemo(!app.demo) },

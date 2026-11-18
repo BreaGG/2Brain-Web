@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties } from "react";
+import { useRouter } from "next/navigation";
+import { syncWiki } from "@/app/actions";
 import { useApp, NAV, ADD_ACCENT } from "./context";
 import { Icon, Wordmark } from "@/components/ui";
 import { SPECTRUM } from "@/lib/palettes";
@@ -95,15 +97,7 @@ export default function Rail({ open, onHome }: { open: boolean; onHome: () => vo
           </span>
           <span>Review {figs.issues}</span>
         </button>
-        <div className="rail-status">
-          <svg width="18" height="18" viewBox="0 0 18 18" className="ring-spin" aria-hidden>
-            {Array.from({ length: 12 }, (_, k) => {
-              const a = (k / 12) * Math.PI * 2;
-              return <circle key={k} cx={(9 + Math.cos(a) * 6.5).toFixed(2)} cy={(9 + Math.sin(a) * 6.5).toFixed(2)} r={1.15} fill={SPECTRUM[k % 8]} />;
-            })}
-          </svg>
-          <span>{model.notes.length} notes · live</span>
-        </div>
+        <SyncStatus count={model.notes.length} />
       </div>
     </nav>
   );
@@ -224,6 +218,66 @@ function RailBrain() {
           setFocus({ kind: "groups", groupBy: settings.groupBy, keys: [graph.nodes[best].g] });
         }}
       />
+    </div>
+  );
+}
+
+/** "N notes · live", and a Sync button that fetches the wiki afresh from GitHub now. */
+function SyncStatus({ count }: { count: number }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+  const before = useRef(count);
+  const [waiting, setWaiting] = useState(false);
+
+  // after a sync, say what changed once the new record has arrived
+  useEffect(() => {
+    if (!waiting) return;
+    if (count !== before.current) {
+      const d = count - before.current;
+      setMsg(d > 0 ? `${d} new` : `${-d} fewer`);
+      setWaiting(false);
+    }
+  }, [count, waiting]);
+  useEffect(() => {
+    if (!waiting) return;
+    const t = setTimeout(() => {
+      setWaiting(false);
+      setMsg("up to date");
+    }, 6000);
+    return () => clearTimeout(t);
+  }, [waiting]);
+  useEffect(() => {
+    if (!msg) return;
+    const t = setTimeout(() => setMsg(null), 4000);
+    return () => clearTimeout(t);
+  }, [msg]);
+
+  const sync = () =>
+    start(async () => {
+      before.current = count;
+      const r = await syncWiki();
+      if (!r.ok) {
+        setMsg(`again in ${r.wait}s`);
+        return;
+      }
+      setWaiting(true);
+      router.refresh();
+    });
+
+  const busy = pending || waiting;
+  return (
+    <div className="rail-status">
+      <svg width="18" height="18" viewBox="0 0 18 18" className={`ring-spin${busy ? " fast" : ""}`} aria-hidden>
+        {Array.from({ length: 12 }, (_, k) => {
+          const a = (k / 12) * Math.PI * 2;
+          return <circle key={k} cx={(9 + Math.cos(a) * 6.5).toFixed(2)} cy={(9 + Math.sin(a) * 6.5).toFixed(2)} r={1.15} fill={SPECTRUM[k % 8]} />;
+        })}
+      </svg>
+      <span style={{ flex: 1 }}>{busy ? "syncing…" : msg ?? `${count} notes · live`}</span>
+      <button type="button" className="sync" onClick={sync} disabled={busy} title="Fetch the wiki from GitHub now">
+        Sync
+      </button>
     </div>
   );
 }
