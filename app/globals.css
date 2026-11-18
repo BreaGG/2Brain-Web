@@ -1323,6 +1323,66 @@ button.row:hover .grow {
   padding: 0 6px;
 }
 
+/* ── greeting ─────────────────────────────────────────────────────────── */
+
+.greeting {
+  position: absolute;
+  z-index: 8;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 240px;
+  padding: 16px 22px 14px;
+  border: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-align: center;
+  cursor: pointer;
+  animation: greetIn 0.9s var(--ease) both;
+}
+.greeting.leaving {
+  animation: greetOut 0.6s var(--ease) both;
+}
+.greeting-hello {
+  font-size: 30px;
+  line-height: 1.1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.greeting-date {
+  margin-top: 8px;
+  color: var(--dim);
+}
+.greeting-time {
+  display: block;
+  height: 2px;
+  margin-top: 14px;
+  background: var(--spectrum);
+  transform-origin: left center;
+  animation: greetTime linear both;
+}
+@keyframes greetIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+@keyframes greetOut {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+@keyframes greetTime {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 /* ── command bar ────────────────────────────────────────────────────────── */
 
 .scrim {
@@ -2813,6 +2873,14 @@ button.row:hover .grow {
   }
   .demo-chip {
     top: 10px;
+  }
+  .greeting {
+    top: 14px;
+    min-width: 0;
+    width: calc(100% - 32px);
+  }
+  .greeting-hello {
+    font-size: 26px;
   }
 
   /* inputs at 16px so iOS does not zoom into them */
