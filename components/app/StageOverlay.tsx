@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useApp } from "./context";
 import { BrainMark, Dot, Icon } from "@/components/ui";
 import ViewPanel from "./ViewPanel";
+import Greeting from "./Greeting";
 import TableBuilder from "./TableBuilder";
 import { GROUP_BY_LABEL, fmtDate, fmtInt, monthKey, monthLabel, monthRange, monthStart, singularType } from "@/lib/brain";
 
@@ -67,6 +68,7 @@ export default function StageOverlay({
         </div>
       </div>
       <DemoChip />
+      <Greeting />
       {vizOpen && <ViewPanel onClose={() => setVizOpen(false)} />}
       {settings.tableBuilder && <TableBuilder />}
       <Legend />
