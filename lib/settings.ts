@@ -26,6 +26,8 @@ export interface Settings {
   cosmos: boolean;
   order: RecordOrder;
   limitRotation: boolean;
+  /** Faint threads joining the passages of each note. */
+  scaffold: boolean;
   notes: boolean;
   record: boolean;
   ghosts: boolean;
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   cosmos: false,
   order: "oldest",
   limitRotation: false,
+  scaffold: false,
   notes: true,
   record: true,
   ghosts: false,

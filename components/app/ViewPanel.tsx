@@ -3,9 +3,38 @@
 import { useState, type CSSProperties } from "react";
 import { useApp } from "./context";
 import { Icon, Range, Select, SwitchRow } from "@/components/ui";
-import { PALETTES, THEMES, paletteGradient, type ThemeId } from "@/lib/palettes";
+import { PALETTES, THEMES, groupCss, paletteGradient, type PaletteId, type ThemeId } from "@/lib/palettes";
 import type { GroupBy } from "@/lib/brain";
 import type { GroupLayout, LabelMode, LabelSize, RecordOrder } from "@/lib/settings";
+
+/* a small brain over a spine, in the theme's ground and the data colours */
+const MINI_BRAIN = [
+  [20, 9], [26, 7], [32, 8], [38, 10], [16, 14], [22, 13], [28, 12], [34, 13], [40, 15], [18, 19], [24, 18], [30, 17], [36, 19], [22, 23], [28, 22], [34, 23],
+];
+const MINI_SPINE = [[28, 27], [28, 31], [28, 35], [27, 39], [28, 43]];
+
+function ThemeTile({ id, label, bg, palette, on, onPick }: { id: ThemeId; label: string; bg: string; palette: PaletteId; on: boolean; onPick: (id: ThemeId) => void }) {
+  return (
+    <button type="button" className="theme-tile" aria-pressed={on} onClick={() => onPick(id)} title={`${label} theme`}>
+      <svg viewBox="0 0 56 46" aria-hidden style={{ background: bg }}>
+        <defs>
+          <radialGradient id={`ground-${id}`} cx="50%" cy="100%" r="70%">
+            <stop offset="0" stopColor="#fff" stopOpacity="0.12" />
+            <stop offset="1" stopColor="#fff" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+        <rect width="56" height="46" fill={`url(#ground-${id})`} />
+        {MINI_SPINE.map(([x, y], k) => (
+          <circle key={`s${k}`} cx={x} cy={y} r={0.9} fill="#fff" opacity={0.75 - k * 0.1} />
+        ))}
+        {MINI_BRAIN.map(([x, y], k) => (
+          <circle key={k} cx={x} cy={y} r={1.5} fill={groupCss(palette, k % 8, 8)} />
+        ))}
+      </svg>
+      <span>{label}</span>
+    </button>
+  );
+}
 
 export default function ViewPanel({ onClose }: { onClose: () => void }) {
   const { settings: s, set, resetSettings, model, startTour, demo, setDemo, usingSample } = useApp();
@@ -39,30 +68,31 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="viz-scroll">
-        {more && (
         <section className="viz-section">
           <div className="label">Appearance</div>
-          <div className="pick">
-            <span>Colour theme</span>
-            <Select<ThemeId>
-              label="Colour theme"
-              value={s.theme}
-              options={THEMES.map((t) => ({ value: t.id, label: t.label }))}
-              onChange={(v) => set("theme", v)}
-            />
+          <div className="theme-tiles" role="group" aria-label="Colour theme">
+            {THEMES.map((t) => (
+              <ThemeTile key={t.id} id={t.id} label={t.label} bg={t.bg} palette={s.palette} on={s.theme === t.id} onPick={(v) => set("theme", v)} />
+            ))}
           </div>
-          <div className="ground" title="Ground glow behind the body">
-            <Range className="range" label="Ground glow" min={0} max={100} value={s.ground} onChange={(v) => set("ground", v)} />
-          </div>
+          {more && (
+            <div className="ground" title="Ground glow behind the body">
+              <Range className="range" label="Ground glow" min={0} max={100} value={s.ground} onChange={(v) => set("ground", v)} />
+            </div>
+          )}
         </section>
-        )}
 
         <section className="viz-section">
           <div className="label">Data colours</div>
           {PALETTES.map((p) => (
             <button key={p.id} type="button" className="palette" aria-pressed={s.palette === p.id} onClick={() => set("palette", p.id)}>
               <span>{p.label}</span>
-              <i style={{ background: paletteGradient(p.id) }} />
+              <span className="swatches">
+                <i className="bar" style={{ background: paletteGradient(p.id) }} />
+                {Array.from({ length: 8 }, (_, k) => (
+                  <i key={k} className="sw" style={{ background: groupCss(p.id, k, 8) }} />
+                ))}
+              </span>
             </button>
           ))}
         </section>
@@ -177,6 +207,7 @@ export default function ViewPanel({ onClose }: { onClose: () => void }) {
           <div className="label">Drawn</div>
           <SwitchRow label="Links" on={s.links} onChange={(v) => set("links", v)} />
           <SwitchRow label="Tracts" on={s.tracts} onChange={(v) => set("tracts", v)} />
+          <SwitchRow label="Scaffold" note="threads through each note’s passages" on={s.scaffold} onChange={(v) => set("scaffold", v)} />
           <div className="switch-row">
             <span>Brain outline</span>
             <span style={{ display: "flex", alignItems: "center", gap: 10 }}>

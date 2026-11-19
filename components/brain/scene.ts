@@ -30,6 +30,8 @@ export interface SceneView {
   focusBrain: boolean;
   tracts: boolean;
   limitRotation: boolean;
+  /** Faint threads joining the passages of each note, in the order they were written. */
+  scaffold: boolean;
 }
 
 export interface SceneLabel {
@@ -130,6 +132,17 @@ const POINT_FS = /* glsl */ `
     float glow = (1.0 - d);
     float a = glow * glow * 0.55 + smoothstep(0.6, 0.0, d) * 0.55;
     a *= vAlpha;
+    gl_FragColor = vec4(vColor * a, a);
+  }
+`;
+
+/* scaffold threads: drawn with the record's own vertex shader, so they follow every form */
+const THREAD_FS = /* glsl */ `
+  uniform float uOpacity;
+  varying vec3 vColor;
+  varying float vAlpha;
+  void main() {
+    float a = vAlpha * uOpacity;
     gl_FragColor = vec4(vColor * a, a);
   }
 `;
@@ -340,6 +353,17 @@ export class BrainScene {
   private rec?: THREE.Points;
   private recGeo?: THREE.BufferGeometry;
   private recMat = pointsMaterial(true);
+  private threads?: THREE.LineSegments;
+  // shares the record's uniforms, so it moves, morphs, dims and spins with it
+  private threadMat = additive(
+    new THREE.ShaderMaterial({
+      defines: { SPIN: 1 },
+      vertexShader: POINT_VS,
+      fragmentShader: THREAD_FS,
+      uniforms: { ...this.recMat.uniforms, uOpacity: { value: 0 } },
+    }),
+  );
+  private threadCur = 0;
 
   private fibres?: THREE.LineSegments;
   private fibreGeo?: THREE.BufferGeometry;
@@ -428,6 +452,7 @@ export class BrainScene {
     focusBrain: false,
     tracts: true,
     limitRotation: false,
+    scaffold: false,
   };
   private bodyCur = 1;
   private formCur = 0;
@@ -574,6 +599,7 @@ export class BrainScene {
     this.rec.renderOrder = 1;
     this.root.add(this.rec);
     this.recMat.uniforms.uDim.value = 0.07;
+    this.buildThreads(rg, anat);
 
     // nerve fibres: each body point joined to the point before it
     this.fibreGeo?.dispose();
@@ -981,6 +1007,66 @@ export class BrainScene {
     g.setAttribute("aGalA", new THREE.BufferAttribute(A, 3));
     g.setAttribute("aGalS", new THREE.BufferAttribute(S, 1));
     g.setAttribute("aGalO", new THREE.BufferAttribute(O, 1));
+    this.shareWithThreads();
+  }
+
+  /** Scaffold: join each note's passages, in the order written (not the brain matter, which is not text). */
+  private buildThreads(rg: THREE.BufferGeometry, anat: Anatomy) {
+    if (this.threads) {
+      this.root.remove(this.threads);
+      this.threads.geometry.dispose();
+    }
+    // each note's passages as a chain: from its first, always on to the nearest one not yet joined,
+    // so the threads run along the nerves instead of leaping across the body; long jumps are left out
+    const P = anat.recCount;
+    const pos = anat.recPos;
+    const byNote = new Map<number, number[]>();
+    for (let k = 0; k < P; k++) {
+      if (anat.recKind[k] === KIND_MATTER) continue;
+      const n = anat.recNote[k];
+      if (!byNote.has(n)) byNote.set(n, []);
+      byNote.get(n)!.push(k);
+    }
+    const MAX2 = 0.28 * 0.28;
+    const pairs: number[] = [];
+    for (const ks of byNote.values()) {
+      if (ks.length < 2) continue;
+      ks.sort((a, b) => anat.recOrder[a] - anat.recOrder[b]);
+      const left = ks.slice(1);
+      let cur = ks[0];
+      while (left.length) {
+        let best = 0;
+        let bd = Infinity;
+        const cx = pos[cur * 3], cy = pos[cur * 3 + 1], cz = pos[cur * 3 + 2];
+        for (let j = 0; j < left.length; j++) {
+          const q = left[j] * 3;
+          const d = (pos[q] - cx) ** 2 + (pos[q + 1] - cy) ** 2 + (pos[q + 2] - cz) ** 2;
+          if (d < bd) {
+            bd = d;
+            best = j;
+          }
+        }
+        const next = left[best];
+        left[best] = left[left.length - 1];
+        left.pop();
+        if (bd < MAX2) pairs.push(cur, next);
+        cur = next;
+      }
+    }
+    const tg = new THREE.BufferGeometry();
+    tg.setIndex(new THREE.BufferAttribute(new Uint32Array(pairs), 1));
+    this.threads = new THREE.LineSegments(tg, this.threadMat);
+    this.shareWithThreads(rg);
+    this.threads.frustumCulled = false;
+    this.threads.renderOrder = 0;
+    this.threads.visible = false;
+    this.root.add(this.threads);
+  }
+
+  /** The threads read the record's own attributes, so they are where its points are. */
+  private shareWithThreads(rg = this.recGeo) {
+    if (!this.threads || !rg) return;
+    for (const [name, attr] of Object.entries(rg.attributes)) this.threads.geometry.setAttribute(name, attr);
   }
 
   /** Pixels on the left covered by a panel: the view is centred in what is left. */
@@ -1237,7 +1323,7 @@ export class BrainScene {
       const m = o as THREE.Mesh;
       m.geometry?.dispose?.();
     });
-    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat, this.tractMat, this.starMat, this.glowMat, this.shooterMat].forEach((m) => m.dispose());
+    [this.notesMat, this.recMat, this.fibreMat, this.linesMat, this.ghostMat, this.ghostLineMat, this.ringMat, this.scaffoldMat, this.tractMat, this.starMat, this.glowMat, this.shooterMat, this.threadMat].forEach((m) => m.dispose());
     this.renderer.dispose();
     el.remove();
     this.labelEls.forEach((e) => e.remove());
@@ -1498,6 +1584,10 @@ export class BrainScene {
     this.recMat.uniforms.uBodyK.value = this.bodyCur;
     this.fibreMat.uniforms.uOpacity.value = 0.2 * (1 - this.formCur) * (1 - this.hasLitCur * 0.3) * this.bodyCur;
     if (this.fibres) this.fibres.visible = this.bodyCur > 0.01 && this.formCur < 0.98;
+    this.threadCur = ease(this.threadCur, this.view.scaffold && (this.view.record || this.view.outline) ? 1 : 0, dt, 3);
+    // in clusters and galaxies the passages of a note are scattered, so the threads stay a hint there
+    this.threadMat.uniforms.uOpacity.value = 0.045 * this.threadCur * (1 - 0.85 * this.formCur);
+    if (this.threads) this.threads.visible = this.threadCur > 0.01;
     // charts keep links faint; the tree hides them until something is lit
     const k = this.layout?.key ?? "";
     const quiet = k.startsWith("tree") || k.startsWith("answer:flow") || k.startsWith("cosmos") ? 0.95 * (1 - this.hasLitCur) : 0.6;

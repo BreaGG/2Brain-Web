@@ -1247,8 +1247,56 @@ button.row:hover .grow {
 .palette[aria-pressed="true"] {
   border-color: var(--ink);
 }
-.palette i {
-  height: 5px;
+.palette .swatches {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 3px;
+  align-items: center;
+}
+.palette .swatches .bar {
+  grid-column: 1 / -1;
+  height: 3px;
+  opacity: 0.55;
+}
+.palette .swatches .sw {
+  height: 7px;
+}
+.palette {
+  height: auto;
+  padding: 4px;
+}
+
+/* colour themes as small previews */
+.theme-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+.theme-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  color: var(--dim);
+  text-align: left;
+  transition: border-color var(--fast) var(--ease);
+}
+.theme-tile svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 56 / 46;
+  outline: 1px solid var(--hair);
+}
+.theme-tile:hover {
+  border-color: var(--hair);
+}
+.theme-tile[aria-pressed="true"] {
+  border-color: var(--ink);
+  color: var(--ink);
 }
 
 /* ── walkthrough ───────────────────────────────────────────────────────── */

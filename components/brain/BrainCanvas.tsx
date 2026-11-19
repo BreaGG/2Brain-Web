@@ -148,8 +148,9 @@ export default function BrainCanvas(p: BrainCanvasProps) {
       focusBrain: st.focusBrain,
       tracts: st.tracts,
       limitRotation: st.limitRotation,
+      scaffold: st.scaffold,
     });
-  }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, st.focusBrain, st.tracts, st.limitRotation, s, anat]);
+  }, [st.form, st.split, st.turning, st.speed, st.links, st.outline, st.outlineOpacity, st.pointSize, st.notes, st.record, st.ghosts, st.focusBrain, st.tracts, st.limitRotation, st.scaffold, s, anat]);
 
   useEffect(() => {
     const layoutLabels: SceneLabel[] = (grouped?.labels ?? []).map((l) => ({ text: l.text, pos: l.pos, kind: l.kind, group: l.group, gal: l.gal }));
