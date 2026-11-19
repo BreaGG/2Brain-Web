@@ -6,7 +6,7 @@ import { monthKey, monthLabel, monthRange } from "./brain";
 
 export type AxisKey = "month" | "year" | "weekday" | "folder" | "domain" | "type" | "links" | "length" | "none";
 export type FormKey = "grid" | "ribbon" | "wheel" | "spheres" | "shells" | "clusters" | "folders";
-export type AnswerKey = "stream" | "flow" | "waves" | "chord" | "clock" | "calendar" | "returns" | "lifelines" | "balance";
+export type AnswerKey = "stream" | "flow" | "waves" | "chord" | "clock" | "calendar" | "returns" | "lifelines" | "balance" | "columns" | "bars" | "ranks" | "quiet";
 export type SizeKey = "same" | "words" | "links";
 
 export const AXES: { value: AxisKey; label: string }[] = [
@@ -41,7 +41,47 @@ export const ANSWERS: { value: AnswerKey; label: string; question: string }[] = 
   { value: "returns", label: "Returns", question: "Which notes do I keep coming back to?" },
   { value: "lifelines", label: "Lifelines", question: "How long does an area of thought live?" },
   { value: "balance", label: "Balance", question: "How much is my own thinking, and how much comes from sources?" },
+  { value: "columns", label: "Columns", question: "How much did I write each month, and on what?" },
+  { value: "bars", label: "Bars", question: "Which areas hold the most?" },
+  { value: "ranks", label: "Ranks", question: "How has the order of my areas changed over time?" },
+  { value: "quiet", label: "Quiet", question: "Which areas have gone quiet, and for how long?" },
 ];
+
+/** The cumulative rank of every group at the end of every month (0 = the largest so far). */
+export function rankSeries(model: Model, grouping: Grouping, weight: (i: number) => number = () => 1): { months: number[]; rank: number[][] } {
+  const months = monthRange(model);
+  const at = new Map(months.map((m, k) => [m, k]));
+  const G = grouping.list.length;
+  const add: number[][] = Array.from({ length: G }, () => new Array(months.length).fill(0));
+  model.notes.forEach((n, i) => {
+    if (n.date == null) return;
+    add[grouping.of[i]][at.get(monthKey(n.date)) ?? 0] += weight(i);
+  });
+  const final = add.map((v) => v.reduce((a, b) => a + b, 0));
+  const run = new Array(G).fill(0);
+  const rank: number[][] = Array.from({ length: G }, () => new Array(months.length).fill(0));
+  months.forEach((_, m) => {
+    for (let g = 0; g < G; g++) run[g] += add[g][m];
+    [...run.keys()]
+      .sort((a, b) => run[b] - run[a] || final[b] - final[a] || a - b)
+      .forEach((g, k) => (rank[g][m] = k));
+  });
+  return { months, rank };
+}
+
+/** When each group was last written in (null when none of its notes is dated). */
+export function lastWritten(model: Model, grouping: Grouping): (number | null)[] {
+  const last: (number | null)[] = grouping.list.map(() => null);
+  model.notes.forEach((n, i) => {
+    if (n.date == null) return;
+    const g = grouping.of[i];
+    if (last[g] == null || n.date > last[g]!) last[g] = n.date;
+  });
+  return last;
+}
+
+/** Whole days from a date to today. */
+export const daysAgo = (t: number, now = Date.now()) => Math.max(0, Math.floor((now - t) / DAY));
 
 /** Note types that hold the person's own thinking rather than a summary of someone else's. */
 export const OWN_TYPES = new Set(["concept", "synthesis", "page", "meta"]);
@@ -141,6 +181,51 @@ export function insight(model: Model, answer: AnswerKey, grouping: Grouping, axe
       for (const n of dated) last.set(grouping.of[n.i], Math.max(last.get(grouping.of[n.i]) ?? 0, n.date!));
       const going = [...last.values()].filter((t) => model.dateMax! - t < 60 * DAY).length;
       return `${going} of ${last.size} areas are still going: something was written in them in the last two months.`;
+    }
+    case "columns": {
+      if (!dated.length) return "None of your notes is dated yet.";
+      const per = new Map<number, number>();
+      for (const n of dated) per.set(monthKey(n.date!), (per.get(monthKey(n.date!)) ?? 0) + 1);
+      const [m, v] = [...per.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0];
+      const months = Math.max(1, monthRange(model).length);
+      return `Your busiest month was ${monthLabel(m)}, with ${v} notes; on average you write ${(dated.length / months).toFixed(1)} a month.`;
+    }
+    case "bars": {
+      const order = grouping.list.map((_, i) => i).filter((i) => grouping.list[i].notes > 0).sort((a, b) => grouping.list[b].record - grouping.list[a].record);
+      if (!order.length) return "Nothing to measure yet.";
+      const top = grouping.list[order[0]];
+      const low = grouping.list[order[order.length - 1]];
+      if (order.length === 1) return `${top.label} holds everything: ${top.notes} notes.`;
+      const times = top.record / Math.max(1, low.record);
+      return `${top.label} is the largest area, with ${top.notes} notes and ${top.record.toLocaleString("en")} passages${times >= 1.5 ? `, ${times.toFixed(times < 10 ? 1 : 0)} times ${low.label}` : ""}.`;
+    }
+    case "ranks": {
+      const { months, rank } = rankSeries(model, grouping);
+      if (months.length < 2) return "Too few months yet to see the order change.";
+      const born = (g: number) => {
+        const k = rank[g].findIndex((_, m) => model.notes.some((n, i) => grouping.of[i] === g && n.date != null && monthKey(n.date) <= months[m]));
+        return k < 0 ? months.length - 1 : k;
+      };
+      let best = -1;
+      let gain = 0;
+      for (let g = 0; g < rank.length; g++) {
+        const d = rank[g][born(g)] - rank[g][months.length - 1];
+        if (d > gain) {
+          gain = d;
+          best = g;
+        }
+      }
+      if (best < 0) return `The order of your areas has held since ${monthLabel(months[0])}.`;
+      return `${label(best)} climbed furthest: from #${rank[best][born(best)] + 1} in ${monthLabel(months[born(best)])} to #${rank[best][months.length - 1] + 1} now.`;
+    }
+    case "quiet": {
+      const last = lastWritten(model, grouping);
+      let g = -1;
+      for (let k = 0; k < last.length; k++) if (last[k] != null && (g < 0 || last[k]! < last[g]!)) g = k;
+      if (g < 0) return "None of your notes is dated yet.";
+      const d = daysAgo(last[g]!);
+      const still = last.filter((t) => t != null && daysAgo(t) < 30).length;
+      return `${label(g)} has been quiet longest: nothing new in ${d} days. ${still} of ${last.filter((t) => t != null).length} areas had something new this month.`;
     }
     case "balance": {
       let own = 0;
