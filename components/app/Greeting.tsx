@@ -32,7 +32,7 @@ export default function Greeting() {
 
   if (!text) return null;
   return (
-    <div className={`greeting${leaving ? " leaving" : ""}`} role="status" aria-live="polite" onClick={() => setText(null)} title="Close">
+    <div className={`greeting${leaving ? " leaving" : ""}`} role="status" aria-live="polite">
       <p className="greeting-hello">{text.hello}</p>
       <p className="greeting-date label">{text.date}</p>
       <i className="greeting-time" style={{ animationDuration: `${SHOW_MS}ms` }} />
