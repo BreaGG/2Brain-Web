@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { SPECTRUM } from "@/lib/palettes";
 
 const SHOW_MS = 4_000;
 const NAME = "Alejandro";
@@ -33,9 +34,16 @@ export default function Greeting() {
   if (!text) return null;
   return (
     <div className={`greeting${leaving ? " leaving" : ""}`} role="status" aria-live="polite">
-      <p className="greeting-hello">{text.hello}</p>
+      {/* each letter gathers out of a coloured point, as the notes do in the brain, and scatters again on the way out */}
+      <p className="greeting-hello" aria-label={text.hello}>
+        {[...text.hello].map((ch, i) => (
+          <span key={i} aria-hidden style={{ "--i": i, "--c": SPECTRUM[i % SPECTRUM.length] } as CSSProperties}>
+            {ch === " " ? "\u00a0" : ch}
+          </span>
+        ))}
+      </p>
       <p className="greeting-date label">{text.date}</p>
-      <i className="greeting-time" style={{ animationDuration: `${SHOW_MS}ms` }} />
+      <i className="greeting-time" style={{ animationDuration: `0.5s, ${SHOW_MS - 1400}ms` }} />
     </div>
   );
 }
