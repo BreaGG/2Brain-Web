@@ -3135,3 +3135,18 @@ button.row:hover .grow {
     transition-duration: 0.001s !important;
   }
 }
+
+/* ── saving a picture ───────────────────────────────────────────────────── */
+
+.capture.busy {
+  opacity: 0.5;
+  cursor: progress;
+}
+.capture.done {
+  border-color: var(--l3) !important;
+  color: var(--l3);
+}
+.capture.failed {
+  border-color: var(--l0) !important;
+  color: var(--l0);
+}

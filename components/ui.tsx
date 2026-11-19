@@ -23,7 +23,8 @@ type IconName =
   | "copy"
   | "galaxy"
   | "play"
-  | "pause";
+  | "pause"
+  | "camera";
 
 export function Icon({ name, size = 14, style }: { name: IconName; size?: number; style?: CSSProperties }) {
   const p = {
@@ -152,6 +153,13 @@ export function Icon({ name, size = 14, style }: { name: IconName; size?: number
       return (
         <svg {...p}>
           <path d="M4.5 3.5h2.5v9H4.5zM9 3.5h2.5v9H9z" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "camera":
+      return (
+        <svg {...p}>
+          <path d="M1.5 4.5h3l1.2-2h4.6l1.2 2h3v9h-13z" />
+          <circle cx="8" cy="8.7" r="2.6" />
         </svg>
       );
     case "copy":

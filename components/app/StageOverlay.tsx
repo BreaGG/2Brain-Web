@@ -6,6 +6,7 @@ import { useApp } from "./context";
 import { BrainMark, Dot, Icon } from "@/components/ui";
 import ViewPanel from "./ViewPanel";
 import Greeting from "./Greeting";
+import { requestCapture } from "@/lib/capture";
 import TableBuilder from "./TableBuilder";
 import { GROUP_BY_LABEL, fmtDate, fmtInt, monthKey, monthLabel, monthRange, monthStart, singularType } from "@/lib/brain";
 
@@ -45,6 +46,7 @@ export default function StageOverlay({
           >
             <Icon name="galaxy" size={14} />
           </button>
+          <CaptureButton />
           <button
             type="button"
             className="icon-button boxed"
@@ -128,6 +130,25 @@ function StageFind() {
 }
 
 /* ── what is lit, with a way back ─────────────────────────────────────────── */
+
+/* ── a picture of the brain ──────────────────────────────────────────────── */
+
+export function CaptureButton({ className = "icon-button boxed" }: { className?: string }) {
+  const [state, setState] = useState<"idle" | "busy" | "done" | "failed">("idle");
+  const run = async () => {
+    if (state === "busy") return;
+    setState("busy");
+    const r = await requestCapture();
+    setState(r.ok ? "done" : "failed");
+    setTimeout(() => setState("idle"), 1800);
+  };
+  const title = state === "done" ? "Picture saved" : state === "failed" ? "The picture could not be made" : "Save a picture of the brain (P)";
+  return (
+    <button type="button" className={`${className} capture${state !== "idle" ? ` ${state}` : ""}`} title={title} aria-label="Save a picture" onClick={run} data-capture="">
+      <Icon name="camera" size={13} />
+    </button>
+  );
+}
 
 /* ── growth: play the record back, note by note ───────────────────────────── */
 
