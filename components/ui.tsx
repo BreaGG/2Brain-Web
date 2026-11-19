@@ -21,7 +21,9 @@ type IconName =
   | "expand"
   | "menu"
   | "copy"
-  | "galaxy";
+  | "galaxy"
+  | "play"
+  | "pause";
 
 export function Icon({ name, size = 14, style }: { name: IconName; size?: number; style?: CSSProperties }) {
   const p = {
@@ -138,6 +140,18 @@ export function Icon({ name, size = 14, style }: { name: IconName; size?: number
           <path d="M8 8c0-1.6 1.6-2.4 3-1.6 1.8 1 1.6 3.9-.5 5-2.7 1.4-6-.4-6.4-3.4C3.7 4.6 7 1.9 10.6 2.6" />
           <path d="M8 8c0 1.6-1.6 2.4-3 1.6-1.8-1-1.6-3.9.5-5 2.7-1.4 6 .4 6.4 3.4.4 3.4-2.9 6.1-6.5 5.4" />
           <circle cx="8" cy="8" r="0.9" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "play":
+      return (
+        <svg {...p}>
+          <path d="M5 3.5v9l7.5-4.5z" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    case "pause":
+      return (
+        <svg {...p}>
+          <path d="M4.5 3.5h2.5v9H4.5zM9 3.5h2.5v9H9z" fill="currentColor" stroke="none" />
         </svg>
       );
     case "copy":

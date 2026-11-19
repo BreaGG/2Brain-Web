@@ -68,6 +68,7 @@ export default function StageOverlay({
         </div>
       </div>
       <DemoChip />
+      <GrowthBar />
       <Greeting />
       {vizOpen && <ViewPanel onClose={() => setVizOpen(false)} />}
       {settings.tableBuilder && <TableBuilder />}
@@ -128,9 +129,57 @@ function StageFind() {
 
 /* ── what is lit, with a way back ─────────────────────────────────────────── */
 
+/* ── growth: play the record back, note by note ───────────────────────────── */
+
+function GrowthBar() {
+  const { growth, setGrowth, growOrder, model, colorOf } = useApp();
+  if (!growth) return null;
+  const N = growOrder.length;
+  const k = Math.floor(growth.k);
+  const last = k > 0 ? model.notes[growOrder[k - 1]] : null;
+  const words = growOrder.slice(0, k).reduce((s, i) => s + model.notes[i].words, 0);
+  return (
+    <div className="growth-bar" role="group" aria-label="Watch the brain grow">
+      <button
+        type="button"
+        className="icon-button"
+        aria-label={growth.playing ? "Pause" : "Play"}
+        onClick={() => setGrowth(growth.playing ? { ...growth, playing: false } : { k: growth.k >= N ? 0 : growth.k, playing: true })}
+      >
+        <Icon name={growth.playing ? "pause" : "play"} size={12} />
+      </button>
+      <input
+        type="range"
+        className="range"
+        aria-label="Notes shown"
+        min={0}
+        max={N}
+        step={1}
+        value={k}
+        style={{ "--p": `${(k / Math.max(1, N)) * 100}%` } as CSSProperties}
+        onChange={(e) => setGrowth({ k: Number(e.target.value), playing: false })}
+      />
+      <span className="growth-cap">
+        <b>{last ? fmtDate(last.date) : "Before the first note"}</b>
+        <span>
+          {k} of {N} notes · {fmtInt(words)} words
+        </span>
+        {last && (
+          <span className="growth-note" style={{ "--c": colorOf(last.i) } as CSSProperties}>
+            {last.title}
+          </span>
+        )}
+      </span>
+      <button type="button" className="icon-button" aria-label="Show the whole brain" title="Close (Esc)" onClick={() => setGrowth(null)}>
+        <Icon name="close" size={12} />
+      </button>
+    </div>
+  );
+}
+
 function FocusChip() {
-  const { focus, setFocus, model, pane } = useApp();
-  if (focus.kind === "none" || focus.kind === "note" || pane === "note") return null;
+  const { focus, setFocus, model, pane, growth } = useApp();
+  if (growth || focus.kind === "none" || focus.kind === "note" || pane === "note") return null;
   let text = "";
   if (focus.kind === "groups") {
     const g = model.groups[focus.groupBy];
@@ -208,7 +257,7 @@ function Legend() {
 /* ── activity: notes per month, drag to light a period ────────────────────── */
 
 function Activity() {
-  const { model, lightSet, focus, setFocus } = useApp();
+  const { model, lightSet, focus, setFocus, setGrowth } = useApp();
   const ref = useRef<HTMLCanvasElement>(null);
   const months = useMemo(() => monthRange(model), [model]);
   const counts = useMemo(() => {
@@ -272,6 +321,9 @@ function Activity() {
 
   return (
     <div className="activity">
+      <button type="button" className="activity-grow" onClick={() => setGrowth({ k: 0, playing: true })} title="Watch the brain grow, note by note (G)">
+        <Icon name="play" size={9} /> Grow
+      </button>
       <div className="activity-cap">
         <span>{range ? "" : capM != null ? monthLabel(months[capM]) : monthLabel(months[0])}</span>
         <span>{capM != null && !range ? `${counts[capM] ? fmtInt(counts[capM]) + " words" : "—"}` : range ? "" : monthLabel(months[months.length - 1])}</span>

@@ -17,7 +17,8 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 export default function Timeline({ accent, onClose }: PaneProps) {
-  const { model, settings, set, colors, lightSet } = useApp();
+  const app = useApp();
+  const { model, settings, set, colors, lightSet } = app;
   const months = useMemo(() => monthRange(model), [model]);
   const g = model.groups[settings.groupBy];
   const [picked, setPicked] = useState<number | null>(null);
@@ -111,6 +112,9 @@ export default function Timeline({ accent, onClose }: PaneProps) {
         onClose={onClose}
         tools={
           <>
+            <button type="button" className="btn grow-btn" onClick={() => app.setGrowth({ k: 0, playing: true })} title="Watch the brain grow, note by note (G)">
+              Watch it grow
+            </button>
             <span>Hide unsorted</span>
             <Switch on={settings.hideUnsorted} onChange={(v) => set("hideUnsorted", v)} label="Hide unsorted" />
           </>

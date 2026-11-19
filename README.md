@@ -10,6 +10,7 @@ A second brain you can see. Every page of the wiki is a point on the cortex of a
 - **Cosmos** (galaxy icon next to the brain button, or `C`): a purely visual form where every section of the wiki is a galaxy (spiral, barred spiral or elliptical, by size) round the general index. Each galaxy turns on its own axis while the ring of galaxies turns slowly round the centre; streams of light join the sections that link to each other most, and now and then a shooting star crosses.
 - **Legend** (bottom): every group with its notes · record counts. Click to light a group, shift-click to add one.
 - **Activity** (bottom right): notes per month; drag to light a period.
+- **Watch it grow** (**Grow** above Activity, the Timeline pane, ⌘K or `G`): plays the record back, every note appearing in the order it was written, with its date, a running count and the latest note's title; pause and scrub with the slider, Esc to show the whole brain again.
 - **Panes**: Navigator (folders, types, months and every note), Numbers, Timeline, You (hubs and what to work on next), Lab (table builder, gesture control, link analysis), Review (ghost links, orphans, missing fields), Files, Learn and Add.
 - **Reader**: opening a note shows it beside the brain and lights it and its neighbours. Its URL is `/wiki/<folder>/<slug>`.
 

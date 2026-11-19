@@ -232,6 +232,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
     if (vizOpen) return setVizOpen(false);
     if (railOpen) return setRailOpen(false);
     if (pane) return closeCurrent();
+    if (growth) return setGrowth(null);
     if (focus.kind !== "none") return setFocusState({ kind: "none" });
   };
   useEffect(() => {
@@ -257,6 +258,8 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
         setSettings((st) => ({ ...st, focusBrain: !st.focusBrain }));
       } else if (e.key === "c" && !e.metaKey && !e.ctrlKey) {
         set("cosmos", !settingsRef.current.cosmos);
+      } else if (e.key === "g" && !e.metaKey && !e.ctrlKey) {
+        setGrowth((g) => (g ? null : { k: 0, playing: true }));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -287,8 +290,38 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
     return { noteLit: lit, recLit: rec };
   }, [focus, model, N]);
 
+  /* ── growth: the brain as it was, note by note ─────────────────────────── */
+  const growOrder = useMemo(
+    () =>
+      model.notes
+        .map((n) => n.i)
+        .sort((a, b) => (model.notes[a].date ?? Infinity) - (model.notes[b].date ?? Infinity) || model.notes[a].id.localeCompare(model.notes[b].id)),
+    [model],
+  );
+  const [growth, setGrowth] = useState<{ k: number; playing: boolean } | null>(null);
+  const shownK = growth ? Math.floor(growth.k) : N;
+  useEffect(() => {
+    if (!growth?.playing) return;
+    // about twelve seconds from the first note to the last, however many there are
+    const per = Math.max(1, N) / 12;
+    let last = performance.now();
+    const id = window.setInterval(() => {
+      const now = performance.now();
+      const dt = (now - last) / 1000;
+      last = now;
+      setGrowth((g) => {
+        if (!g || !g.playing) return g;
+        const k = Math.min(N, g.k + per * dt);
+        return { k, playing: k < N };
+      });
+    }, 60);
+    return () => window.clearInterval(id);
+  }, [growth?.playing, N]);
+  useEffect(() => setGrowth(null), [model]);
+
   const hidden = useMemo(() => {
     const h = new Uint8Array(N);
+    if (shownK < N) for (let j = shownK; j < growOrder.length; j++) h[growOrder[j]] = 1;
     if (settings.hideUnsorted) {
       for (let i = 0; i < N; i++) if (grouping.list[grouping.of[i]]?.unsorted) h[i] = 1;
     }
@@ -300,7 +333,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
       }
     }
     return h;
-  }, [settings.hideUnsorted, settings.tableBuilder, settings.tbFilter, grouping, N, model]);
+  }, [settings.hideUnsorted, settings.tableBuilder, settings.tbFilter, grouping, N, model, shownK, growOrder]);
 
   const labels = useMemo<SceneLabel[]>(() => {
     if (settings.labels === "none") return [];
@@ -355,6 +388,9 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
     replaceSettings,
     writable: writable && !demo,
     startTour: () => setTour(true),
+    growOrder,
+    growth,
+    setGrowth,
     demo,
     setDemo: (v: boolean) => {
       setDemoState(v);
