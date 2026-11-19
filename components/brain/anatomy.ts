@@ -52,6 +52,10 @@ export interface Anatomy {
   recKind: Uint8Array;
   recOrder: Float32Array; // 0..1, the order points appear in
   recSplit: Float32Array; // x offset when split (brain matter only)
+  /** Brain points only: the outward normal of the brain's surface there (zero for the body), for light and shade. */
+  recNormal: Float32Array;
+  /** Brain points only: 0..1, how near the point sits to the border between two lobes (where the big sulci run). */
+  recSulcus: Float32Array;
   fibres: Uint32Array; // pairs of record indices along the nerves
 }
 
@@ -343,36 +347,70 @@ export function buildAnatomy(model: Model, atlas: Atlas, opts: { small: boolean;
   weight.reduce((acc, w, k) => (cum[k] = acc + w), 0);
   const W = cum[cum.length - 1] || 1;
 
-  const total = matter.length + slots.length;
+  // the cortex is drawn denser than the atlas samples it: extra points on the surface, in the tangent plane
+  // of each atlas point, carry its note, colour and normal, and their own depth in the folds
+  const extra = opts.small ? 0 : 2;
+  const matterTotal = matter.length * (1 + extra);
+  const total = matterTotal + slots.length;
   const recPos = new Float32Array(total * 3);
   const recKind = new Uint8Array(total);
   const recNote = new Int32Array(total);
   const recOrder = new Float32Array(total);
   const recSplit = new Float32Array(total);
+  const recNormal = new Float32Array(total * 3);
+  const recSulcus = new Float32Array(total);
+  const surf = brainSurface(atlas);
 
   // matter first
-  matter.forEach((p, k) => {
-    recPos[k * 3] = BP[p * 3];
-    recPos[k * 3 + 1] = BP[p * 3 + 1];
-    recPos[k * 3 + 2] = BP[p * 3 + 2];
-    recKind[k] = KIND_MATTER;
-    recOrder[k] = r() * 0.05;
-    recSplit[k] = Math.sign(BP[p * 3] || (r() - 0.5)) * SPLIT;
+  matter.forEach((p, m) => {
     const g = patchOf[p];
     const cands = g >= 0 && notesOf[g].length ? notesOf[g] : null;
-    recNote[k] = nearestNote(BP, p, notePos, cands, n);
+    const owner = nearestNote(BP, p, notePos, cands, n);
+    const side = Math.sign(BP[p * 3] || (r() - 0.5)) * SPLIT;
+    const nx = surf.normal[p * 3], ny = surf.normal[p * 3 + 1], nz = surf.normal[p * 3 + 2];
+    // a tangent basis at the point
+    let ax = 0, ay = 0, az = 0, bx = 0, by = 0, bz = 0;
+    if (nx || ny || nz) {
+      const hx = Math.abs(nx) < 0.9 ? 1 : 0, hy = hx ? 0 : 1;
+      ax = ny * 0 - nz * hy; ay = nz * hx - nx * 0; az = nx * hy - ny * hx;
+      const la = Math.hypot(ax, ay, az) || 1;
+      ax /= la; ay /= la; az /= la;
+      bx = ny * az - nz * ay; by = nz * ax - nx * az; bz = nx * ay - ny * ax;
+    }
+    for (let e = 0; e <= extra; e++) {
+      const k = m * (1 + extra) + e;
+      let x = BP[p * 3], y = BP[p * 3 + 1], z = BP[p * 3 + 2];
+      if (e > 0) {
+        const ang = r() * Math.PI * 2, rad = 0.004 + r() * 0.01;
+        x += (ax * Math.cos(ang) + bx * Math.sin(ang)) * rad;
+        y += (ay * Math.cos(ang) + by * Math.sin(ang)) * rad;
+        z += (az * Math.cos(ang) + bz * Math.sin(ang)) * rad;
+      }
+      recPos[k * 3] = x;
+      recPos[k * 3 + 1] = y;
+      recPos[k * 3 + 2] = z;
+      recNormal[k * 3] = nx;
+      recNormal[k * 3 + 1] = ny;
+      recNormal[k * 3 + 2] = nz;
+      recSulcus[k] = e === 0 ? surf.sulcus[p] : Math.max(surf.lobe[p], surf.foldAt(x, y, z, atlas.brainRegion[p]));
+      recKind[k] = KIND_MATTER;
+      recOrder[k] = r() * 0.05;
+      recSplit[k] = side;
+      recNote[k] = owner;
+    }
   });
 
   // then the body, in written order
   const bodyIndex = new Int32Array(B).fill(-1);
   let note = 0;
   slots.forEach((s, k) => {
-    const at = matter.length + k;
+    const at = matterTotal + k;
     const P = s.src === "stem" ? BP : atlas.bodyPos;
     recPos[at * 3] = P[s.i * 3];
     recPos[at * 3 + 1] = P[s.i * 3 + 1];
     recPos[at * 3 + 2] = P[s.i * 3 + 2];
     recKind[at] = s.kind;
+    if (s.src === "stem") recNormal.set(surf.normal.subarray(s.i * 3, s.i * 3 + 3), at * 3);
     recOrder[at] = 0.06 + (k / Math.max(1, slots.length - 1)) * 0.94;
     const target = ((k + 0.5) / slots.length) * W;
     while (note < cum.length - 1 && cum[note] < target) note++;
@@ -391,7 +429,160 @@ export function buildAnatomy(model: Model, atlas: Atlas, opts: { small: boolean;
     if (q >= 0 && bodyIndex[q] >= 0) fib.push(a, bodyIndex[q]);
   }
 
-  return { n, notePos, noteSplit, noteRegion, recCount: total, recNote, recPos, recKind, recOrder, recSplit, fibres: new Uint32Array(fib) };
+  return { n, notePos, noteSplit, noteRegion, recCount: total, recNote, recPos, recKind, recOrder, recSplit, recNormal, recSulcus, fibres: new Uint32Array(fib) };
+}
+
+/* ── the brain's surface: normals and the sulci between lobes ─────────────── */
+
+interface Surface {
+  normal: Float32Array;
+  /** Lobe borders, folds and folia together: 0 on a gyrus, 1 deep in a sulcus. */
+  sulcus: Float32Array;
+  /** Lobe borders alone. */
+  lobe: Float32Array;
+  /** The folds at any point of the cortex of a region (for points added between the atlas's own). */
+  foldAt: (x: number, y: number, z: number, region: number) => number;
+}
+const surfaceCache = new WeakMap<Atlas, Surface>();
+const CORTEX = new Set([0, 1, 2, 3, 4, 6]);
+
+/** Smallest-eigenvalue eigenvector of a symmetric 3×3 matrix (Jacobi rotations). */
+function smallestEigen(m: number[]): [number, number, number] {
+  const a = [[m[0], m[1], m[2]], [m[1], m[3], m[4]], [m[2], m[4], m[5]]];
+  const v = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (let sweep = 0; sweep < 8; sweep++) {
+    for (const [p, q] of [[0, 1], [0, 2], [1, 2]]) {
+      if (Math.abs(a[p][q]) < 1e-12) continue;
+      const th = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+      const t = Math.sign(th || 1) / (Math.abs(th) + Math.sqrt(th * th + 1));
+      const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+      for (let k = 0; k < 3; k++) {
+        const akp = a[k][p], akq = a[k][q];
+        a[k][p] = c * akp - s * akq;
+        a[k][q] = s * akp + c * akq;
+      }
+      for (let k = 0; k < 3; k++) {
+        const apk = a[p][k], aqk = a[q][k];
+        a[p][k] = c * apk - s * aqk;
+        a[q][k] = s * apk + c * aqk;
+      }
+      for (let k = 0; k < 3; k++) {
+        const vkp = v[k][p], vkq = v[k][q];
+        v[k][p] = c * vkp - s * vkq;
+        v[k][q] = s * vkp + c * vkq;
+      }
+    }
+  }
+  const i = a[0][0] <= a[1][1] && a[0][0] <= a[2][2] ? 0 : a[1][1] <= a[2][2] ? 1 : 2;
+  return [v[0][i], v[1][i], v[2][i]];
+}
+
+/* Gradient noise on a lattice, seeded: the meandering lines of the sulci follow its zero crossings. */
+function makeNoise(seed: number) {
+  const R = rng(seed);
+  const S = 32;
+  const g = new Float32Array(S * S * S * 3);
+  for (let i = 0; i < S * S * S; i++) {
+    let x = R() * 2 - 1, y = R() * 2 - 1, z = R() * 2 - 1;
+    const l = Math.hypot(x, y, z) || 1;
+    x /= l; y /= l; z /= l;
+    g[i * 3] = x; g[i * 3 + 1] = y; g[i * 3 + 2] = z;
+  }
+  const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
+  return (x: number, y: number, z: number) => {
+    x += 64; y += 64; z += 64;
+    const ix = Math.floor(x), iy = Math.floor(y), iz = Math.floor(z);
+    const fx = x - ix, fy = y - iy, fz = z - iz;
+    const u = fade(fx), v = fade(fy), w = fade(fz);
+    let out = 0;
+    for (let dx = 0; dx < 2; dx++)
+      for (let dy = 0; dy < 2; dy++)
+        for (let dz = 0; dz < 2; dz++) {
+          const q = (((ix + dx) % S) * S * S + ((iy + dy) % S) * S + ((iz + dz) % S)) * 3;
+          const dot = g[q] * (fx - dx) + g[q + 1] * (fy - dy) + g[q + 2] * (fz - dz);
+          out += dot * (dx ? u : 1 - u) * (dy ? v : 1 - v) * (dz ? w : 1 - w);
+        }
+    return out;
+  };
+}
+
+/** Per brain point: the surface normal (from the plane through its neighbours, turned outward) and how deep in a sulcus it lies:
+ *  the borders between lobes, the folds of the cortex (meandering, the gyri between them) and the fine parallel folia of the cerebellum. */
+export function brainSurface(atlas: Atlas): Surface {
+  const hit = surfaceCache.get(atlas);
+  if (hit) return hit;
+  const N = atlas.brainN, P = atlas.brainPos, R = atlas.brainRegion;
+  const cell = 0.06;
+  const key = (x: number, y: number, z: number) => `${Math.floor(x / cell)},${Math.floor(y / cell)},${Math.floor(z / cell)}`;
+  const grid = new Map<string, number[]>();
+  for (let i = 0; i < N; i++) {
+    const k = key(P[i * 3], P[i * 3 + 1], P[i * 3 + 2]);
+    let l = grid.get(k);
+    if (!l) grid.set(k, (l = []));
+    l.push(i);
+  }
+  const normal = new Float32Array(N * 3);
+  const border = new Float32Array(N);
+  const noise = makeNoise(907);
+  const lobeOf = new Float32Array(N);
+  const foldAt = (x: number, y: number, z: number, region: number) => {
+    if (region === 6) {
+      // cerebellum: thin folia running across it, side to side
+      return 0.85 * (1 - Math.min(1, Math.abs(Math.sin((y + z * 0.35) * 40)) / 0.45));
+    }
+    if (!CORTEX.has(region)) return 0;
+    // cortex: meandering sulci between the gyri
+    const f = 3.6;
+    const nz = noise(x * f, y * f, z * f) + 0.3 * noise(x * f * 2.3 + 7, y * f * 2.3 + 7, z * f * 2.3 + 7);
+    return 0.9 * (1 - Math.min(1, Math.abs(nz) / 0.1));
+  };
+  const r2 = cell * cell, rb2 = 0.04 * 0.04;
+  for (let i = 0; i < N; i++) {
+    const x = P[i * 3], y = P[i * 3 + 1], z = P[i * 3 + 2];
+    const gx = Math.floor(x / cell), gy = Math.floor(y / cell), gz = Math.floor(z / cell);
+    let n = 0, mx = 0, my = 0, mz = 0;
+    const near: number[] = [];
+    for (let a = -1; a <= 1; a++)
+      for (let b = -1; b <= 1; b++)
+        for (let c = -1; c <= 1; c++) {
+          const l = grid.get(`${gx + a},${gy + b},${gz + c}`);
+          if (!l) continue;
+          for (const j of l) {
+            const dx = P[j * 3] - x, dy = P[j * 3 + 1] - y, dz = P[j * 3 + 2] - z;
+            const d = dx * dx + dy * dy + dz * dz;
+            // the two hemispheres face each other across the midline: keep them apart
+            if (d > r2 || Math.sign(P[j * 3] || 1) !== Math.sign(x || 1)) continue;
+            near.push(j);
+            mx += P[j * 3]; my += P[j * 3 + 1]; mz += P[j * 3 + 2];
+            n++;
+          }
+        }
+    if (n < 4) continue;
+    mx /= n; my /= n; mz /= n;
+    const cv = [0, 0, 0, 0, 0, 0];
+    let diff = 0, cortexN = 0;
+    for (const j of near) {
+      const dx = P[j * 3] - mx, dy = P[j * 3 + 1] - my, dz = P[j * 3 + 2] - mz;
+      cv[0] += dx * dx; cv[1] += dx * dy; cv[2] += dx * dz; cv[3] += dy * dy; cv[4] += dy * dz; cv[5] += dz * dz;
+      const ex = P[j * 3] - x, ey = P[j * 3 + 1] - y, ez = P[j * 3 + 2] - z;
+      if (ex * ex + ey * ey + ez * ez < rb2 && CORTEX.has(R[j]) && CORTEX.has(R[i])) {
+        cortexN++;
+        if (R[j] !== R[i]) diff++;
+      }
+    }
+    const nv = smallestEigen(cv);
+    // outward: away from the middle of the hemisphere the point is in
+    const ox = x - Math.sign(x || 1) * 0.3, oy = y + 0.12, oz = z;
+    const s = nv[0] * ox + nv[1] * oy + nv[2] * oz < 0 ? -1 : 1;
+    normal[i * 3] = nv[0] * s;
+    normal[i * 3 + 1] = nv[1] * s;
+    normal[i * 3 + 2] = nv[2] * s;
+    lobeOf[i] = cortexN ? Math.min(1, (2.2 * diff) / cortexN) : 0;
+    border[i] = Math.max(lobeOf[i], foldAt(x, y, z, R[i]));
+  }
+  const out = { normal, sulcus: border, lobe: lobeOf, foldAt };
+  surfaceCache.set(atlas, out);
+  return out;
 }
 
 function nearestNote(P: Float32Array, p: number, notePos: Float32Array, cands: number[] | null, n: number) {
