@@ -13,6 +13,7 @@ import type { FormSpec } from "@/components/brain/forms";
 import { AppCtx, NAV, type AppApi, type Focus, type PaneId } from "./context";
 import Rail from "./Rail";
 import StageOverlay, { CaptureButton } from "./StageOverlay";
+import Offline from "./Offline";
 import CommandBar from "./CommandBar";
 import Panes from "./Panes";
 import Walkthrough from "./Walkthrough";
@@ -224,6 +225,8 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
       setFocusState((f) => (f.kind === "note" ? { kind: "none" } : f));
     };
     window.addEventListener("popstate", onPop);
+    // offline, a note's address is answered with the saved brain: open the note from the address
+    if (!initialSlug && /^\/wiki\/.+/.test(window.location.pathname)) onPop();
     return () => window.removeEventListener("popstate", onPop);
   }, [model, initialSlug]);
 
@@ -498,6 +501,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
             onClear={() => setFocusState({ kind: "none" })}
           />
           <StageOverlay vizOpen={vizOpen} setVizOpen={setVizOpen} hover={hover} />
+          <Offline />
         </main>
 
         {cmd.open && <CommandBar initial={cmd.q} onClose={() => setCmd({ open: false, q: "" })} setVizOpen={setVizOpen} />}
