@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useApp } from "@/components/app/context";
@@ -8,6 +8,7 @@ import type { PaneProps } from "@/components/app/Panes";
 import { Dot, Icon, PaneHead, Sect } from "@/components/ui";
 import { buildSlugMap } from "@/lib/parser";
 import { capital, fmtDate, fmtInt, singularType } from "@/lib/brain";
+import EditNote from "./EditNote";
 
 const WIKI = "#wiki=";
 
@@ -28,13 +29,14 @@ function linkify(md: string, titleOf: (target: string) => string | null) {
 }
 
 export default function Reader({ onClose }: PaneProps) {
-  const { model, noteIdx, openNote, colorOf, settings, repo } = useApp();
+  const { model, noteIdx, openNote, colorOf, settings, repo, writable, demo } = useApp();
   const root = useRef<HTMLDivElement>(null);
   const slugMap = useMemo(() => buildSlugMap(model.pages), [model]);
+  const [editing, setEditing] = useState<string | null>(null);
 
   useEffect(() => {
     root.current?.closest(".pane")?.scrollTo({ top: 0 });
-  }, [noteIdx]);
+  }, [noteIdx, editing]);
 
   if (noteIdx == null) return null;
   const n = model.notes[noteIdx];
@@ -62,122 +64,159 @@ export default function Reader({ onClose }: PaneProps) {
 
   return (
     <div ref={root} style={{ "--accent": color } as CSSProperties}>
-      <PaneHead title={n.title} accent={color} onClose={onClose} />
-      <div className="pane-body">
-        <div className="reader-meta label">
-          <span>
-            <Dot c={color} />
-            {g.list[g.of[noteIdx]]?.label}
-          </span>
-          <span>{singularType(n.type)}</span>
-          {n.domains.filter((d) => d !== "uncategorized" && capital(d) !== g.list[g.of[noteIdx]]?.label).map((d) => (
-            <span key={d}>{capital(d)}</span>
-          ))}
-          <span>{n.date ? `Updated ${fmtDate(n.date)}` : "Undated"}</span>
-          <span>{fmtInt(n.words)} words</span>
+      <PaneHead
+        title={n.title}
+        accent={color}
+        onClose={onClose}
+        tools={
+          writable && !demo && editing !== n.id ? (
+            <button type="button" className="btn reader-edit" onClick={() => setEditing(n.id)} title="Edit this note and save it to GitHub">
+              Edit
+            </button>
+          ) : undefined
+        }
+      />
+      {editing === n.id ? (
+        <div className="pane-body">
+          <EditNote i={noteIdx} accent={color} onDone={() => setEditing(null)} />
         </div>
-
-        {page.sources.length > 0 && (
-          <div className="reader-sources">
-            <span className="label">Sources · {page.sources.length}</span>
-            <div className="rows">
-              {page.sources.map((s) => {
-                const j = resolve(s);
-                return j != null ? (
-                  <button key={s} type="button" className="row wrap" onClick={() => openNote(j)} title={model.notes[j].id}>
-                    <Dot c={colorOf(j)} />
-                    <span className="grow">{model.notes[j].title}</span>
-                    <span className="count">{singularType(model.notes[j].type)}</span>
-                  </button>
-                ) : (
-                  <div key={s} className="row wrap" style={{ color: "var(--dim)" }} title="Not written yet">
-                    <Dot c="transparent" hollow />
-                    <span className="grow">{s}</span>
-                    <span className="count">Not written</span>
-                  </div>
-                );
-              })}
-            </div>
+      ) : (
+        <div className="pane-body">
+          <div className="reader-meta label">
+            <span>
+              <Dot c={color} />
+              {g.list[g.of[noteIdx]]?.label}
+            </span>
+            <span>{singularType(n.type)}</span>
+            {n.domains
+              .filter((d) => d !== "uncategorized" && capital(d) !== g.list[g.of[noteIdx]]?.label)
+              .map((d) => (
+                <span key={d}>{capital(d)}</span>
+              ))}
+            <span>{n.date ? `Updated ${fmtDate(n.date)}` : "Undated"}</span>
+            <span>{fmtInt(n.words)} words</span>
           </div>
-        )}
 
-        <article className="prose">
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            urlTransform={(url) => (url.startsWith(WIKI) ? url : defaultUrlTransform(url))}
-            components={{
-              a({ href, children }) {
-                if (href?.startsWith(WIKI)) {
-                  const target = decodeURIComponent(href.slice(WIKI.length));
-                  const j = resolve(target);
-                  if (j == null)
+          {page.sources.length > 0 && (
+            <div className="reader-sources">
+              <span className="label">Sources · {page.sources.length}</span>
+              <div className="rows">
+                {page.sources.map((s) => {
+                  const j = resolve(s);
+                  return j != null ? (
+                    <button key={s} type="button" className="row wrap" onClick={() => openNote(j)} title={model.notes[j].id}>
+                      <Dot c={colorOf(j)} />
+                      <span className="grow">{model.notes[j].title}</span>
+                      <span className="count">{singularType(model.notes[j].type)}</span>
+                    </button>
+                  ) : (
+                    <div key={s} className="row wrap" style={{ color: "var(--dim)" }} title="Not written yet">
+                      <Dot c="transparent" hollow />
+                      <span className="grow">{s}</span>
+                      <span className="count">Not written</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <article className="prose">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              urlTransform={(url) => (url.startsWith(WIKI) ? url : defaultUrlTransform(url))}
+              components={{
+                a({ href, children }) {
+                  if (href?.startsWith(WIKI)) {
+                    const target = decodeURIComponent(href.slice(WIKI.length));
+                    const j = resolve(target);
+                    if (j == null)
+                      return (
+                        <span className="wl ghost" title="Not written yet">
+                          {children as ReactNode}
+                        </span>
+                      );
                     return (
-                      <span className="wl ghost" title="Not written yet">
+                      <a
+                        className="wl"
+                        href={`/wiki/${model.notes[j].id}`}
+                        style={{ textDecorationColor: colorOf(j) }}
+                        onClick={(e) => {
+                          if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+                          e.preventDefault();
+                          openNote(j);
+                        }}
+                      >
                         {children as ReactNode}
-                      </span>
+                      </a>
                     );
+                  }
                   return (
-                    <a
-                      className="wl"
-                      href={`/wiki/${model.notes[j].id}`}
-                      style={{ textDecorationColor: colorOf(j) }}
-                      onClick={(e) => {
-                        if (e.metaKey || e.ctrlKey || e.shiftKey) return;
-                        e.preventDefault();
-                        openNote(j);
-                      }}
-                    >
+                    <a href={href} target="_blank" rel="noopener noreferrer">
                       {children as ReactNode}
                     </a>
                   );
-                }
-                return (
-                  <a href={href} target="_blank" rel="noopener noreferrer">
-                    {children as ReactNode}
-                  </a>
-                );
-              },
-            }}
-          >
-            {linkify(page.bodyContent, (t) => {
-              const j = resolve(t);
-              return j == null ? null : model.notes[j].title;
-            })}
-          </ReactMarkdown>
-        </article>
+                },
+              }}
+            >
+              {linkify(page.bodyContent, (t) => {
+                const j = resolve(t);
+                return j == null ? null : model.notes[j].title;
+              })}
+            </ReactMarkdown>
+          </article>
 
-        {n.out.length > 0 && (
-          <Sect label={`Links out · ${n.out.length}`} accent={color}>
-            <List ids={n.out} />
-          </Sect>
-        )}
-        {n.in.length > 0 && (
-          <Sect label={`Links in · ${n.in.length}`} accent={color}>
-            <List ids={n.in} />
-          </Sect>
-        )}
-        {n.ghosts.length > 0 && (
-          <Sect label={`Not written yet · ${n.ghosts.length}`} accent={color}>
-            <div className="rows">
-              {n.ghosts.map((s) => (
-                <div key={s} className="row" style={{ color: "var(--dim)" }}>
-                  <Dot c="transparent" hollow />
-                  <span className="grow">{s}</span>
-                </div>
-              ))}
-            </div>
-          </Sect>
-        )}
-
-        <div style={{ display: "flex", gap: 18, marginTop: 28, fontSize: 12.5 }}>
-          <span style={{ fontFamily: "var(--mono)", fontSize: 11, color: "var(--dim)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}>{page.path}</span>
-          {repo && (
-            <a className="link" href={`https://github.com/${repo.owner}/${repo.repo}/blob/HEAD/${page.path}`} target="_blank" rel="noreferrer" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
-              Edit on GitHub <Icon name="out" size={11} />
-            </a>
+          {n.out.length > 0 && (
+            <Sect label={`Links out · ${n.out.length}`} accent={color}>
+              <List ids={n.out} />
+            </Sect>
           )}
+          {n.in.length > 0 && (
+            <Sect label={`Links in · ${n.in.length}`} accent={color}>
+              <List ids={n.in} />
+            </Sect>
+          )}
+          {n.ghosts.length > 0 && (
+            <Sect label={`Not written yet · ${n.ghosts.length}`} accent={color}>
+              <div className="rows">
+                {n.ghosts.map((s) => (
+                  <div key={s} className="row" style={{ color: "var(--dim)" }}>
+                    <Dot c="transparent" hollow />
+                    <span className="grow">{s}</span>
+                  </div>
+                ))}
+              </div>
+            </Sect>
+          )}
+
+          <div style={{ display: "flex", gap: 18, marginTop: 28, fontSize: 12.5 }}>
+            <span
+              style={{
+                fontFamily: "var(--mono)",
+                fontSize: 11,
+                color: "var(--dim)",
+                flex: 1,
+                minWidth: 0,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {page.path}
+            </span>
+            {repo && (
+              <a
+                className="link"
+                href={`https://github.com/${repo.owner}/${repo.repo}/blob/HEAD/${page.path}`}
+                target="_blank"
+                rel="noreferrer"
+                style={{ display: "inline-flex", gap: 6, alignItems: "center" }}
+              >
+                Edit on GitHub <Icon name="out" size={11} />
+              </a>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
