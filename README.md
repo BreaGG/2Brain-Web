@@ -4,7 +4,7 @@ A second brain you can see. Every page of the wiki is a point on the cortex of a
 
 ## The interface (v2)
 
-- **Rail** (left): Brain, Navigator, Numbers, Timeline, You, Lab, Review, Files, Learn and Add, plus search (`⌘K`), a small map of your groups and three health figures (sorted, linked, to review).
+- **Rail** (left): Brain, Today (what you wrote today, or on your last day of writing, lit in the brain, with the week at a glance), Navigator, Numbers, Timeline, You, Lab, Review, Files, Learn and Add, plus search (`⌘K`), a small map of your groups and three health figures (sorted, linked, to review).
 - **Brain**: a three.js point cloud. Drag to turn, scroll to zoom, right-drag to move, point at a dot to see its note, click to open it, double-click to clear.
 - **View panel** (sliders icon, or `V`): colour theme, data colours (Default, Lava, Ocean, Forest, Aurora, Mono, Sunset), Form (anatomy ↔ layout), table builder, notes / record / ghost links, group by folder / domain / type, split, labels, hide unsorted, turning and speed, links, brain outline and point size. Settings are remembered per browser.
 - **Cosmos** (galaxy icon next to the brain button, or `C`): a purely visual form where every section of the wiki is a galaxy (spiral, barred spiral or elliptical, by size) round the general index. Each galaxy turns on its own axis while the ring of galaxies turns slowly round the centre; streams of light join the sections that link to each other most, and now and then a shooting star crosses.
