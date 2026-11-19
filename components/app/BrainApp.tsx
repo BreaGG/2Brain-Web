@@ -12,7 +12,7 @@ import type { SceneLabel } from "@/components/brain/scene";
 import type { FormSpec } from "@/components/brain/forms";
 import { AppCtx, NAV, type AppApi, type Focus, type PaneId } from "./context";
 import Rail from "./Rail";
-import StageOverlay from "./StageOverlay";
+import StageOverlay, { CaptureButton } from "./StageOverlay";
 import CommandBar from "./CommandBar";
 import Panes from "./Panes";
 import Walkthrough from "./Walkthrough";
@@ -258,6 +258,8 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
         setSettings((st) => ({ ...st, focusBrain: !st.focusBrain }));
       } else if (e.key === "c" && !e.metaKey && !e.ctrlKey) {
         set("cosmos", !settingsRef.current.cosmos);
+      } else if (e.key === "p" && !e.metaKey && !e.ctrlKey) {
+        document.querySelector<HTMLButtonElement>("[data-capture]")?.click();
       } else if (e.key === "g" && !e.metaKey && !e.ctrlKey) {
         setGrowth((g) => (g ? null : { k: 0, playing: true }));
       }
@@ -426,6 +428,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
             <button type="button" className="icon-button boxed" aria-pressed={settings.cosmos} aria-label="Cosmos" onClick={() => set("cosmos", !settings.cosmos)}>
               <Icon name="galaxy" size={14} />
             </button>
+            <CaptureButton />
             <button type="button" className="icon-button boxed" aria-expanded={vizOpen} aria-label="View settings" onClick={() => { setRailOpen(false); setVizOpen((v) => !v); }}>
               <Icon name="sliders" size={12} />
             </button>

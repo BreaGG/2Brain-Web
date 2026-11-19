@@ -1069,6 +1069,25 @@ export class BrainScene {
     for (const [name, attr] of Object.entries(rg.attributes)) this.threads.geometry.setAttribute(name, attr);
   }
 
+  /**
+   * One frame at `ratio` device pixels per CSS pixel, copied onto a 2D canvas
+   * (the WebGL buffer is not kept between frames, so it is copied straight away).
+   */
+  snapshot(ratio: number): HTMLCanvasElement {
+    const prev = this.renderer.getPixelRatio();
+    this.renderer.setPixelRatio(ratio);
+    this.resize();
+    this.renderer.render(this.scene, this.camera);
+    const src = this.renderer.domElement;
+    const out = document.createElement("canvas");
+    out.width = src.width;
+    out.height = src.height;
+    out.getContext("2d")!.drawImage(src, 0, 0);
+    this.renderer.setPixelRatio(prev);
+    this.resize();
+    return out;
+  }
+
   /** Pixels on the left covered by a panel: the view is centred in what is left. */
   setInsetLeft(px: number) {
     if (px === this.insetLeft) return;

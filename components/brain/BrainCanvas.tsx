@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Model, GroupBy } from "@/lib/brain";
+import { fmtDate, type Model, type GroupBy } from "@/lib/brain";
+import { CAPTURE_EVENT, composePicture, deliverPicture, type CaptureDetail } from "@/lib/capture";
 import type { Settings } from "@/lib/settings";
 import { buildAnatomy, buildGrouped, loadAtlas, type Atlas } from "./anatomy";
 import { buildForm, type FormSpec } from "./forms";
@@ -111,6 +112,35 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   }, []);
 
   const s = sceneRef;
+
+  // a picture of what is on screen, asked for from anywhere on the page
+  const modelRef = useRef(p.model);
+  modelRef.current = p.model;
+  useEffect(() => {
+    const onCapture = (e: Event) => {
+      const { done } = (e as CustomEvent<CaptureDetail>).detail;
+      const sc = s.current;
+      const box = host.current;
+      if (!sc || !box || !labelHost.current) return done({ ok: false });
+      const w = Math.max(1, box.clientWidth);
+      // about twice the screen, and never wider than 4,096 pixels
+      const ratio = Math.min(4096 / w, Math.max(2, window.devicePixelRatio || 1));
+      try {
+        const pic = composePicture(sc.snapshot(ratio), box, labelHost.current, `2brain · ${fmtDate(Date.now())} · ${modelRef.current.notes.length} notes`);
+        const day = new Date().toISOString().slice(0, 10);
+        deliverPicture(pic, `2brain-${day}.png`).then(
+          (how) => done({ ok: true, how }),
+          () => done({ ok: false }),
+        );
+      } catch (err) {
+        console.error("[2brain] capture failed", err);
+        done({ ok: false });
+      }
+    };
+    window.addEventListener(CAPTURE_EVENT, onCapture);
+    return () => window.removeEventListener(CAPTURE_EVENT, onCapture);
+  }, [s]);
+
   useEffect(() => {
     if (anat) s.current?.setAnatomy(anat, p.model.links, p.model.ghostSlugs);
   }, [anat, p.model, s]);
