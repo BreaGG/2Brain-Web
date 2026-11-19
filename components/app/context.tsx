@@ -4,7 +4,7 @@ import { createContext, useContext } from "react";
 import type { GroupBy, Model } from "@/lib/brain";
 import type { Settings } from "@/lib/settings";
 
-export type PaneId = "today" | "navigator" | "numbers" | "timeline" | "you" | "lab" | "review" | "files" | "learn" | "add" | "note";
+export type PaneId = "today" | "ask" | "navigator" | "numbers" | "timeline" | "you" | "lab" | "review" | "files" | "learn" | "add" | "note";
 
 export type Focus =
   | { kind: "none" }
@@ -15,6 +15,7 @@ export type Focus =
 export const NAV: { id: PaneId | "brain"; label: string; accent: string; hint: string }[] = [
   { id: "brain", label: "Brain", accent: "var(--l0)", hint: "The whole record, as a brain" },
   { id: "today", label: "Today", accent: "var(--l7)", hint: "What you wrote today, lit in the brain" },
+  { id: "ask", label: "Ask", accent: "var(--l5)", hint: "Ask your brain a question; Claude answers from your notes" },
   { id: "navigator", label: "Navigator", accent: "var(--l1)", hint: "Folders and every note in them" },
   { id: "numbers", label: "Numbers", accent: "var(--l2)", hint: "The record, counted" },
   { id: "timeline", label: "Timeline", accent: "var(--l3)", hint: "What you wrote and when" },
@@ -57,6 +58,10 @@ export interface AppApi {
   demo: boolean;
   setDemo: (v: boolean) => void;
   /** Growth: the notes in the order they were written, and how many of them are shown (null when off). */
+  askable: boolean;
+  /** A question to start the Ask pane with (from the find bar or ⌘K). */
+  askSeed: { q: string; n: number } | null;
+  askBrain: (q: string) => void;
   growOrder: number[];
   growth: { k: number; playing: boolean } | null;
   setGrowth: (g: { k: number; playing: boolean } | null) => void;

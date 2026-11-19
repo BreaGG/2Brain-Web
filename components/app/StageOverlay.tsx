@@ -84,7 +84,7 @@ export default function StageOverlay({
 /* ── search on the brain: lights matches as you type ──────────────────────── */
 
 function StageFind() {
-  const { model, lightSet, focus, openCommand, setFocus } = useApp();
+  const { model, lightSet, focus, openCommand, setFocus, askBrain } = useApp();
   const [q, setQ] = useState("");
   const fuse = useMemo(
     () =>
@@ -122,7 +122,7 @@ function StageFind() {
       <Icon name="search" size={12} />
       <input id="stage-find" value={q} onChange={(e) => setQ(e.target.value)} placeholder="" aria-label="Find in the brain" autoComplete="off" />
       {q.trim().length > 1 && <span className="hits num">{hits.length}</span>}
-      <button type="button" className="icon-button" style={{ width: 20, height: 20 }} title="Search and commands (⌘K)" aria-label="Open the command bar" onClick={() => openCommand(q)}>
+      <button type="button" className="icon-button" style={{ width: 20, height: 20 }} title="Ask your brain a question" aria-label="Ask your brain" onClick={() => askBrain(q)}>
         <Icon name="ask" size={12} />
       </button>
     </form>

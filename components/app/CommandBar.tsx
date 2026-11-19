@@ -143,10 +143,12 @@ export default function CommandBar({
         hint: singularType(r.item.type),
         run: () => openNote(r.item.i),
       });
+    if (t.length > 2)
+      out.unshift({ id: "ask-q", group: "Ask your brain", title: `Ask: “${t}”`, sub: "Claude answers from your notes, with links to them", hint: "Ask", run: () => app.askBrain(t) });
     const lower = t.toLowerCase();
     const cmds = commands.filter((c) => c.title.toLowerCase().includes(lower) || c.sub?.toLowerCase().includes(lower)).slice(0, 10);
     return [...out, ...cmds];
-  }, [q, fuse, model, commands, colorOf, openNote, lightSet]);
+  }, [q, fuse, model, commands, colorOf, openNote, lightSet, app]);
 
   useEffect(() => setSel(0), [q]);
   useEffect(() => {

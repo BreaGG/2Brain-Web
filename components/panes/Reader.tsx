@@ -10,13 +10,13 @@ import { buildSlugMap } from "@/lib/parser";
 import { capital, fmtDate, fmtInt, singularType } from "@/lib/brain";
 import EditNote from "./EditNote";
 
-const WIKI = "#wiki=";
+export const WIKI = "#wiki=";
 
 /**
  * Turn [[folder/slug|label]] into markdown links the renderer can recognise.
  * An unlabelled link shows the note's title; "[[slug]] — Title" collapses to one link.
  */
-function linkify(md: string, titleOf: (target: string) => string | null) {
+export function linkify(md: string, titleOf: (target: string) => string | null) {
   return md.replace(/\[\[([^\]]+)\]\](?:([ \t]+[—–-][ \t]+)([^\n]*))?/g, (_, inner: string, sep?: string, rest?: string) => {
     const [target, label] = inner.split("|");
     const t = target.trim();
