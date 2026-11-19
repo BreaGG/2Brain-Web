@@ -1340,12 +1340,15 @@ button.row:hover .grow {
   line-height: 1.15;
   font-weight: 600;
   letter-spacing: -0.015em;
-  animation: greetIn 0.8s var(--ease) both;
+}
+.greeting-hello span {
+  display: inline-block;
+  animation: greetGather 0.9s var(--ease) calc(var(--i) * 32ms) both;
 }
 .greeting-date {
   margin-top: 6px;
   color: var(--dim);
-  animation: greetIn 0.8s var(--ease) 0.12s both;
+  animation: greetType 0.7s steps(24, end) 0.55s both;
 }
 .greeting-time {
   display: block;
@@ -1354,15 +1357,53 @@ button.row:hover .grow {
   margin-top: 10px;
   background: var(--spectrum);
   transform-origin: left center;
-  animation: greetTime linear both;
+  animation: greetGrow 0.5s var(--ease) 0.3s both, greetTime linear 0.8s forwards;
 }
-.greeting.leaving > * {
-  animation: greetOut 0.6s var(--ease) both;
+.greeting.leaving .greeting-hello span {
+  animation: greetScatter 0.55s var(--ease) calc(var(--i) * 14ms) both;
 }
-@keyframes greetIn {
-  from {
+.greeting.leaving .greeting-date,
+.greeting.leaving .greeting-time {
+  animation: greetOut 0.5s var(--ease) both;
+}
+/* a blurred point of colour that sharpens into a white letter */
+@keyframes greetGather {
+  0% {
     opacity: 0;
-    transform: translateY(6px);
+    color: var(--c);
+    filter: blur(6px);
+    transform: translateY(10px) scale(0.3);
+  }
+  55% {
+    opacity: 1;
+    color: var(--c);
+    filter: blur(0);
+    transform: none;
+  }
+  100% {
+    opacity: 1;
+    color: var(--ink);
+  }
+}
+@keyframes greetScatter {
+  to {
+    opacity: 0;
+    color: var(--c);
+    filter: blur(4px);
+    transform: translateY(-8px) scale(0.35);
+  }
+}
+@keyframes greetType {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes greetGrow {
+  from {
+    transform: scaleX(0);
   }
 }
 @keyframes greetOut {
