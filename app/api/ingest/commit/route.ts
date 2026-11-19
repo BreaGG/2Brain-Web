@@ -1,24 +1,25 @@
 import { revalidatePath, revalidateTag } from "next/cache";
 import { hasWikiSource } from "@/lib/wiki";
 import { commitImport, WriteError, type StagedFile } from "@/lib/wiki-write";
-import { DOMAIN, rightKey, sourceName } from "@/lib/guard";
+import { DOMAIN, sourceName } from "@/lib/guard";
+import { isOwner } from "@/lib/auth";
 import { MAX_BYTES, kindOf } from "@/lib/ingest";
 
-/* Save an import: POST multipart { file, domain, key, files (JSON StagedFile[]), title }.
+/* Save an import (signed-in owner only): POST multipart { file, domain, files (JSON StagedFile[]), title }.
  * The source goes to sources/<domain>/ and every drafted page to wiki/, in one commit. */
 
 const json = (status: number, body: object) => Response.json(body, { status });
 const PAGE_PATH = /^wiki\/[a-z0-9][a-z0-9_-]*(\/[a-z0-9][a-z0-9_-]*){0,4}\.md$/;
 
 export async function POST(req: Request) {
-  if (!process.env.WIKI_WRITE_KEY || !hasWikiSource()) return json(503, { code: "not-configured", error: "Saving needs the wiki on GitHub and WIKI_WRITE_KEY." });
+  if (!hasWikiSource()) return json(503, { code: "not-configured", error: "Saving needs the wiki on GitHub." });
+  if (!(await isOwner())) return json(401, { code: "signed-out", error: "Sign in with your passkey to save." });
   let form: FormData;
   try {
     form = await req.formData();
   } catch {
     return json(400, { code: "invalid", error: "Nothing to save." });
   }
-  if (!rightKey(form.get("key"))) return json(401, { code: "bad-key", error: "That write key is not right." });
   const file = form.get("file");
   const domain = String(form.get("domain") ?? "");
   if (!(file instanceof File) || file.size > MAX_BYTES || !kindOf(file.name, file.type) || !DOMAIN.test(domain)) return json(400, { code: "invalid", error: "Import the file again." });

@@ -8,7 +8,7 @@ import type { PaneProps } from "@/components/app/Panes";
 import { Dot, Icon, PaneHead, Sect } from "@/components/ui";
 import { buildSlugMap } from "@/lib/parser";
 import { singularType } from "@/lib/brain";
-import { KEY_STORE } from "./WriteNote";
+import SignIn from "@/components/app/SignIn";
 import { WIKI, linkify } from "./Reader";
 
 interface Turn {
@@ -22,27 +22,15 @@ interface Turn {
 const SUGGESTIONS = ["What do I keep coming back to?", "What have I learned about training?", "Which ideas connect my projects and my reading?"];
 
 export default function Ask({ accent, onClose }: PaneProps) {
-  const { model, askable, demo, usingSample, openNote, colorOf, lightSet, askSeed } = useApp();
+  const { model, askable, demo, usingSample, openNote, colorOf, lightSet, askSeed, auth, refreshAuth } = useApp();
+  const owner = !!auth?.owner;
   const slugMap = useMemo(() => buildSlugMap(model.pages), [model]);
   const [q, setQ] = useState("");
   const [turns, setTurns] = useState<Turn[]>([]);
-  const [key, setKey] = useState("");
-  const [hasStoredKey, setHasStoredKey] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const busy = turns[0]?.state === "reading" || turns[0]?.state === "writing";
 
-  useEffect(() => {
-    try {
-      const k = localStorage.getItem(KEY_STORE);
-      if (k) {
-        setKey(k);
-        setHasStoredKey(true);
-      }
-    } catch {
-      /* storage unavailable: the key is asked each time */
-    }
-    return () => abort.current?.abort();
-  }, []);
+  useEffect(() => () => abort.current?.abort(), []);
 
   const resolve = (target: string): number | null => {
     const t = target.split("|")[0].trim();
@@ -60,26 +48,13 @@ export default function Ask({ accent, onClose }: PaneProps) {
     setTurns((t) => [{ q: text, read: [], text: "", state: "reading" } as Turn, ...t].slice(0, 8));
     const patch = (f: (t: Turn) => Turn) => setTurns((all) => [f(all[0]), ...all.slice(1)]);
     try {
-      const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text, key }), signal: ctl.signal });
+      const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question: text }), signal: ctl.signal });
       if (!res.ok || !res.body) {
         const e = (await res.json().catch(() => ({}))) as { code?: string; error?: string };
-        if (e.code === "bad-key") {
-          try {
-            localStorage.removeItem(KEY_STORE);
-          } catch {
-            /* ignore */
-          }
-          setHasStoredKey(false);
-        }
+        if (e.code === "signed-out") void refreshAuth();
         patch((t) => ({ ...t, state: "error", error: e.error ?? `The server said ${res.status}.` }));
         return;
       }
-      try {
-        localStorage.setItem(KEY_STORE, key);
-      } catch {
-        /* ignore */
-      }
-      setHasStoredKey(true);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
@@ -130,9 +105,9 @@ export default function Ask({ accent, onClose }: PaneProps) {
     if (!askSeed || seeded.current === askSeed.n) return;
     seeded.current = askSeed.n;
     setQ(askSeed.q);
-    if (askSeed.q.trim().length > 2 && askable && key) void ask(askSeed.q);
+    if (askSeed.q.trim().length > 2 && askable && owner) void ask(askSeed.q);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [askSeed, key]);
+  }, [askSeed, owner]);
 
   const md = (text: string) => (
     <article className="prose ask-answer">
@@ -200,7 +175,7 @@ export default function Ask({ accent, onClose }: PaneProps) {
                 ? "You are looking at the demo brain; go back to yours to ask."
                 : usingSample
                   ? "This copy shows the sample wiki."
-                  : "To turn it on, add an ANTHROPIC_API_KEY (from console.anthropic.com) and a WIKI_WRITE_KEY of your choosing to the site's environment variables. Each question is billed to that API key."}
+                  : "To turn it on, add an ANTHROPIC_API_KEY (from console.anthropic.com) to the site's environment variables. Each question is billed to that API key, and only you, signed in with your passkey, can ask."}
             </p>
           </div>
         </div>
@@ -235,9 +210,7 @@ export default function Ask({ accent, onClose }: PaneProps) {
             maxLength={1000}
             aria-label="Your question"
           />
-          {!hasStoredKey && (
-            <input className="field-input" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="Write key (WIKI_WRITE_KEY)" aria-label="Write key" autoComplete="current-password" />
-          )}
+          <SignIn why="ask your brain" />
           <div className="ask-acts">
             <span className="write-dest">Claude reads the notes closest to your question. Each question is billed to the site's API key.</span>
             {busy ? (
@@ -245,7 +218,7 @@ export default function Ask({ accent, onClose }: PaneProps) {
                 Stop
               </button>
             ) : (
-              <button type="submit" className="btn solid" disabled={q.trim().length < 3 || !key}>
+              <button type="submit" className="btn solid" disabled={q.trim().length < 3 || !owner}>
                 Ask
               </button>
             )}

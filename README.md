@@ -48,13 +48,22 @@ WIKI_WEBHOOK_SECRET=…   # any long secret, the same one you give the webhook
 
 **Add → Write a new note** saves a note straight to the wiki repository: the Markdown file and the line that lists it in its folder's `index.md` go in as **one commit** (a new folder also gets an index, linked from `wiki/index.md`). The note appears in the brain at once and opens.
 
-Writing is off until you set one more variable:
+Writing, editing, asking and importing are for you alone: you **sign in with a passkey** (your device's Face ID, Touch ID, fingerprint, PIN or a security key), and the device stays signed in for 30 days. There is no key to type.
 
-```bash
-WIKI_WRITE_KEY=…   # any long secret; you type it once in the form and it is remembered on that device
-```
+`GITHUB_TOKEN` needs **write access to the repository's contents** (a fine-grained token with *Contents: Read and write* on that one repository); it stays on the server.
 
-`GITHUB_TOKEN` then needs **write access to the repository's contents** (a fine-grained token with *Contents: Read and write* on that one repository). The key is checked on the server; the token never reaches the browser.
+#### Setting up your passkey (once)
+
+1. Add a short setup code of your choosing to the site's environment variables and redeploy:
+
+   ```bash
+   PASSKEY_SETUP_CODE=…   # used once, to create the first passkey (an old WIKI_WRITE_KEY also works)
+   ```
+
+2. Open 2brain, go to **Add**, type the setup code and press **Create passkey**; confirm with Face ID, Touch ID or your fingerprint. The passkey's *public* key is saved to the wiki repository at `.2brain/passkeys.json` (nothing secret is stored there) and you are signed in.
+3. Once a passkey exists the setup code is no longer accepted, so you can delete `PASSKEY_SETUP_CODE` (and `WIKI_WRITE_KEY`) from the environment.
+
+Passkeys sync across your devices through iCloud Keychain, Google Password Manager or your password manager; on another computer the browser can also use your phone's passkey by scanning a QR code. For a device whose passkeys do not sync, sign in elsewhere and use **Add device** at the bottom of the rail on it. To revoke a passkey, remove its entry from `.2brain/passkeys.json`. Sessions are signed with `AUTH_SECRET` if you set one, otherwise with a key derived from `GITHUB_TOKEN` (changing the token signs every device out). Passkeys belong to the site's address, so a passkey made on the production domain does not work on Vercel preview URLs.
 
 A note is read like this:
 
@@ -71,7 +80,7 @@ Body with [[links]] to other notes.
 
 ### Editing notes from the web
 
-With writing turned on (the same `WIKI_WRITE_KEY` and token as above), every note in the reader has an **Edit** button. It opens the same editor as a new note, filled with the note as it is: title, type, domain, sources and body. **Save changes** writes it back in one commit, sets "Last updated" to today and, when the title changed, updates the note's line in its folder index. Fields you did not touch (and any others, such as "Created") are kept exactly as written. Notes with tables or HTML open in Markdown mode so they come back unchanged. If the file changed on GitHub after you opened the editor, nothing is written and you are asked to sync and redo the edit.
+Signed in with your passkey, every note in the reader has an **Edit** button. It opens the same editor as a new note, filled with the note as it is: title, type, domain, sources and body. **Save changes** writes it back in one commit, sets "Last updated" to today and, when the title changed, updates the note's line in its folder index. Fields you did not touch (and any others, such as "Created") are kept exactly as written. Notes with tables or HTML open in Markdown mode so they come back unchanged. If the file changed on GitHub after you opened the editor, nothing is written and you are asked to sync and redo the edit.
 
 ### Offline
 
@@ -79,16 +88,16 @@ Once 2brain has been opened with a connection, the device keeps a copy: the brai
 
 ### Importing a PDF or web page (Claude)
 
-In **Add → Import a PDF or web page**, choose a PDF, a web page saved as HTML, or a Markdown or text file (up to 4 MB) and the section it belongs to, then **Make notes**. Claude (Claude Sonnet 5.5) runs the wiki repository's own Ingest workflow from its `CLAUDE.md`: it reads the source and the pages it needs, and drafts the source summary page, the entity and concept pages it touches (updating the ones that exist, with their other content kept), the section index and the Log entry in `wiki/index.md`. You see each step as it happens, then every drafted page, marked new or updated, with anything the workflow asks for that is missing. **Save to GitHub** writes the source to `sources/<section>/` exactly as uploaded and every page to `wiki/`, in one commit; if any of those pages changed on GitHub in the meantime, nothing is saved. It needs the same `ANTHROPIC_API_KEY` and `WIKI_WRITE_KEY` as asking, and each import is billed to the API key.
+In **Add → Import a PDF or web page**, choose a PDF, a web page saved as HTML, or a Markdown or text file (up to 4 MB) and the section it belongs to, then **Make notes**. Claude (Claude Sonnet 5.5) runs the wiki repository's own Ingest workflow from its `CLAUDE.md`: it reads the source and the pages it needs, and drafts the source summary page, the entity and concept pages it touches (updating the ones that exist, with their other content kept), the section index and the Log entry in `wiki/index.md`. You see each step as it happens, then every drafted page, marked new or updated, with anything the workflow asks for that is missing. **Save to GitHub** writes the source to `sources/<section>/` exactly as uploaded and every page to `wiki/`, in one commit; if any of those pages changed on GitHub in the meantime, nothing is saved. It needs the same `ANTHROPIC_API_KEY` as asking and your passkey, and each import is billed to the API key.
 
 ### Asking your brain (Claude)
 
 The **Ask** pane (in the rail, the speech-bubble button in the find bar, or "Ask: …" in ⌘K) puts a question to Claude (Claude Sonnet 5.5) about your notes. The server picks the notes closest to the question by their words, sends them with a one-line catalog of every note, and Claude answers with `[[links]]` to the notes it used; if the catalog shows other notes that look relevant (for example a question in Spanish about notes written in English), Claude reads those too before answering. The notes it reads light up in the brain as it works, and the ones in the answer stay lit when it is done.
 
-To turn it on, add to the site's environment variables:
+To turn it on, you need:
 
 - `ANTHROPIC_API_KEY`: an API key from console.anthropic.com. Every question is billed to it: a few cents each (around 15-20k input tokens, and the catalog is cached between questions).
-- `WIKI_WRITE_KEY`: the same key as for writing notes. Asking asks for it once per device, so nobody else can spend on your API key.
+- Your passkey (see above): only you, signed in, can ask, so nobody else can spend on your API key.
 
 ## Development
 

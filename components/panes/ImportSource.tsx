@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useApp, ADD_ACCENT } from "@/components/app/context";
 import { Icon, Select } from "@/components/ui";
-import { KEY_STORE } from "./WriteNote";
+import SignIn from "@/components/app/SignIn";
 
 interface Draft {
   path: string;
@@ -18,14 +18,13 @@ const ACCEPT = ".pdf,.html,.htm,.md,.markdown,.txt,application/pdf,text/html,tex
 const MAX = 4 * 1024 * 1024;
 
 /** Turn a PDF or a saved web page into wiki pages, following the wiki's own ingest guide. */
-export default function ImportSource() {
-  const { model, repo, askable, openNote, setFocus } = useApp();
+export default function ImportSource({ hideSignIn = false }: { hideSignIn?: boolean }) {
+  const { model, repo, askable, openNote, setFocus, auth, refreshAuth } = useApp();
+  const owner = !!auth?.owner;
   const router = useRouter();
   const domains = useMemo(() => model.groups.folder.list.filter((f) => f.key !== "root" && !f.unsorted).map((f) => f.key), [model]);
   const [file, setFile] = useState<File | null>(null);
   const [domain, setDomain] = useState(domains[0] ?? "research");
-  const [key, setKey] = useState("");
-  const [hasStoredKey, setHasStoredKey] = useState(false);
   const [phase, setPhase] = useState<"idle" | "working" | "review" | "saving" | "saved">("idle");
   const [steps, setSteps] = useState<Step[]>([]);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -37,18 +36,7 @@ export default function ImportSource() {
   const [waitFor, setWaitFor] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    try {
-      const k = localStorage.getItem(KEY_STORE);
-      if (k) {
-        setKey(k);
-        setHasStoredKey(true);
-      }
-    } catch {
-      /* the key is asked each time */
-    }
-    return () => abort.current?.abort();
-  }, []);
+  useEffect(() => () => abort.current?.abort(), []);
 
   // once the saved pages are in the brain, open the source summary
   useEffect(() => {
@@ -64,20 +52,13 @@ export default function ImportSource() {
     return (
       <div className="write-off">
         <p>
-          <b>Importing is off.</b> It needs the wiki on GitHub, an ANTHROPIC_API_KEY and the WIKI_WRITE_KEY in the site&rsquo;s environment variables. Claude reads the file and drafts the pages; each import is billed to that API key.
+          <b>Importing is off.</b> It needs the wiki on GitHub and an ANTHROPIC_API_KEY in the site&rsquo;s environment variables. Claude reads the file and drafts the pages; each import is billed to that API key.
         </p>
       </div>
     );
   }
 
-  const badKey = () => {
-    try {
-      localStorage.removeItem(KEY_STORE);
-    } catch {
-      /* ignore */
-    }
-    setHasStoredKey(false);
-  };
+  const badKey = () => void refreshAuth();
 
   const start = async () => {
     if (!file) return;
@@ -94,22 +75,15 @@ export default function ImportSource() {
     const fd = new FormData();
     fd.set("file", file);
     fd.set("domain", domain);
-    fd.set("key", key);
     try {
       const res = await fetch("/api/ingest", { method: "POST", body: fd, signal: ctl.signal });
       if (!res.ok || !res.body) {
         const e = (await res.json().catch(() => ({}))) as { code?: string; error?: string };
-        if (e.code === "bad-key") badKey();
+        if (e.code === "signed-out") badKey();
         setError(e.error ?? `The server said ${res.status}.`);
         setPhase("idle");
         return;
       }
-      try {
-        localStorage.setItem(KEY_STORE, key);
-      } catch {
-        /* ignore */
-      }
-      setHasStoredKey(true);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "";
@@ -153,13 +127,12 @@ export default function ImportSource() {
     const fd = new FormData();
     fd.set("file", file);
     fd.set("domain", domain);
-    fd.set("key", key);
     fd.set("files", JSON.stringify(drafts));
     fd.set("title", file.name.replace(/\.[a-z]+$/i, ""));
     const res = await fetch("/api/ingest/commit", { method: "POST", body: fd }).catch(() => null);
     const out = res ? ((await res.json().catch(() => ({}))) as { ok?: boolean; commitUrl?: string; code?: string; error?: string }) : { error: "No connection." };
     if (!out.ok) {
-      if (out.code === "bad-key") badKey();
+      if (out.code === "signed-out") badKey();
       setError(out.error ?? "The import could not be saved.");
       setPhase("review");
       return;
@@ -204,13 +177,8 @@ export default function ImportSource() {
               <span className="label">Section</span>
               <Select label="Section" value={domain} options={domains.map((d) => ({ value: d, label: d }))} onChange={setDomain} />
             </label>
-            {!hasStoredKey && (
-              <label className="write-field">
-                <span className="label">Write key</span>
-                <input className="field-input" type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder="WIKI_WRITE_KEY" autoComplete="current-password" />
-              </label>
-            )}
           </div>
+          {!hideSignIn && <SignIn why="import sources into your wiki" />}
           <div className="write-acts">
             <span className="write-dest">
               Claude reads it and drafts the pages your wiki&rsquo;s guide asks for: a source summary, the people and ideas it touches, the section index and the log. You review them before anything is saved.
@@ -220,7 +188,7 @@ export default function ImportSource() {
                 Stop
               </button>
             ) : (
-              <button type="button" className="btn solid" disabled={!file || !key} onClick={start}>
+              <button type="button" className="btn solid" disabled={!file || !owner} onClick={start}>
                 Make notes
               </button>
             )}

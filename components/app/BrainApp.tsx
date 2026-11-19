@@ -14,6 +14,7 @@ import { AppCtx, NAV, type AppApi, type Focus, type PaneId } from "./context";
 import Rail from "./Rail";
 import StageOverlay, { CaptureButton } from "./StageOverlay";
 import Offline from "./Offline";
+import type { AuthState } from "@/lib/passkey-client";
 import CommandBar from "./CommandBar";
 import Panes from "./Panes";
 import Walkthrough from "./Walkthrough";
@@ -30,9 +31,9 @@ interface Props {
   initialSlug?: string;
   repo: { owner: string; repo: string } | null;
   usingSample: boolean;
-  /** Writing new notes to the wiki repository is turned on (WIKI_WRITE_KEY is set). */
+  /** The wiki is on GitHub, so the owner, signed in with a passkey, can write to it. */
   writable?: boolean;
-  /** Questions can be put to Claude (an Anthropic API key and the write key are set). */
+  /** Questions can be put to Claude (an Anthropic API key is set); only the signed-in owner can. */
   askable?: boolean;
 }
 
@@ -305,6 +306,22 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
         .sort((a, b) => (model.notes[a].date ?? Infinity) - (model.notes[b].date ?? Infinity) || model.notes[a].id.localeCompare(model.notes[b].id)),
     [model],
   );
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const refreshAuth = useCallback(async () => {
+    const r = (await fetch("/api/auth/session", { cache: "no-store" })
+      .then((x) => x.json())
+      .catch(() => null)) as AuthState | null;
+    setAuth(r ?? { owner: false, registered: false, setup: false, available: false });
+  }, []);
+  useEffect(() => {
+    void refreshAuth();
+    // the old write key is no longer used: do not leave it on the device
+    try {
+      localStorage.removeItem("2brain.writeKey");
+    } catch {
+      /* nothing stored */
+    }
+  }, [refreshAuth]);
   const [askSeed, setAskSeed] = useState<{ q: string; n: number } | null>(null);
   const [growth, setGrowth] = useState<{ k: number; playing: boolean } | null>(null);
   const shownK = growth ? Math.floor(growth.k) : N;
@@ -396,6 +413,8 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
     replaceSettings,
     writable: writable && !demo,
     askable: askable && !demo,
+    auth,
+    refreshAuth,
     askSeed,
     askBrain: (q: string) => {
       setAskSeed({ q, n: Date.now() });

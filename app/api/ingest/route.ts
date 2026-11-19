@@ -1,10 +1,11 @@
 import { getAllPages, hasWikiSource } from "@/lib/wiki";
 import { readRepoText } from "@/lib/wiki-write";
-import { DOMAIN, rightKey, sourceName } from "@/lib/guard";
+import { DOMAIN, sourceName } from "@/lib/guard";
+import { isOwner } from "@/lib/auth";
 import { MAX_BYTES, htmlToMarkdown, kindOf, runIngest, type IngestEvent } from "@/lib/ingest";
 import Anthropic from "@anthropic-ai/sdk";
 
-/* Draft wiki pages from an uploaded source. POST multipart { file, domain, key }; the reply is
+/* Draft wiki pages from an uploaded source (signed-in owner only). POST multipart { file, domain }; the reply is
  * newline-delimited JSON IngestEvents, ending in "staged" (the drafts) or "error". Nothing is saved. */
 
 export const maxDuration = 300;
@@ -12,15 +13,14 @@ export const maxDuration = 300;
 const json = (status: number, body: object) => Response.json(body, { status });
 
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY || !process.env.WIKI_WRITE_KEY || !hasWikiSource())
-    return json(503, { code: "not-configured", error: "Importing needs the wiki on GitHub, ANTHROPIC_API_KEY and WIKI_WRITE_KEY." });
+  if (!process.env.ANTHROPIC_API_KEY || !hasWikiSource()) return json(503, { code: "not-configured", error: "Importing needs the wiki on GitHub and ANTHROPIC_API_KEY." });
+  if (!(await isOwner())) return json(401, { code: "signed-out", error: "Sign in with your passkey to import." });
   let form: FormData;
   try {
     form = await req.formData();
   } catch {
     return json(400, { code: "invalid", error: "Send a file." });
   }
-  if (!rightKey(form.get("key"))) return json(401, { code: "bad-key", error: "That write key is not right." });
   const file = form.get("file");
   const domain = String(form.get("domain") ?? "");
   if (!(file instanceof File)) return json(400, { code: "invalid", error: "Choose a file." });

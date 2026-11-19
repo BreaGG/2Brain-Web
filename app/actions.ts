@@ -1,11 +1,10 @@
 "use server";
 
-import { createHash, timingSafeEqual } from "node:crypto";
 import { revalidatePath, updateTag } from "next/cache";
 import { commitEdit, commitNote, WriteError } from "@/lib/wiki-write";
+import { isOwner } from "@/lib/auth";
 
 export interface WriteInput {
-  key: string;
   title: string;
   type: string;
   folder: string;
@@ -17,24 +16,17 @@ export interface WriteInput {
 
 export type WriteResult =
   | { ok: true; slug: string; path: string; commitUrl: string; indexed: string[] }
-  | { ok: false; code: "locked" | "bad-key" | "invalid" | "exists" | "not-configured" | "github" | "conflict" | "missing"; error: string };
+  | { ok: false; code: "locked" | "signed-out" | "invalid" | "exists" | "not-configured" | "github" | "conflict" | "missing"; error: string };
 
 const FOLDER = /^[a-z0-9][a-z0-9-]{0,60}(\/[a-z0-9][a-z0-9-]{0,60}){0,3}$/;
 const SLUG = /^[a-z0-9][a-z0-9-]{0,99}$/;
 const LINK = /^[a-z0-9][a-z0-9/-]{0,160}$/;
 const TYPE = /^[a-z][a-z-]{1,30}$/;
 
-function sameKey(given: string, wanted: string) {
-  const a = createHash("sha256").update(given).digest();
-  const b = createHash("sha256").update(wanted).digest();
-  return timingSafeEqual(a, b);
-}
 
 /** Write a new note to the wiki repository and add it to its folder's index, in one commit. */
 export async function writeNote(input: WriteInput): Promise<WriteResult> {
-  const wanted = process.env.WIKI_WRITE_KEY;
-  if (!wanted) return { ok: false, code: "locked", error: "Writing is off. Set WIKI_WRITE_KEY in the site's environment variables to turn it on." };
-  if (typeof input?.key !== "string" || !sameKey(input.key, wanted)) return { ok: false, code: "bad-key", error: "That write key is not right." };
+  if (!(await isOwner())) return { ok: false, code: "signed-out", error: "Sign in with your passkey to save." };
 
   const title = String(input.title ?? "").replace(/\s+/g, " ").trim();
   const type = String(input.type ?? "").trim().toLowerCase();
@@ -68,7 +60,6 @@ export async function writeNote(input: WriteInput): Promise<WriteResult> {
 }
 
 export interface EditInput {
-  key: string;
   /** The note's id: its path under wiki/ without .md, e.g. research/concept-x. */
   id: string;
   /** The note's markdown as the editor opened it. */
@@ -84,9 +75,7 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._ -]{0,100}(\/[A-Za-z0-9][A-Za-z0-9._ -]{0,10
 
 /** Save an edit to a note that is already in the wiki. */
 export async function editNote(input: EditInput): Promise<WriteResult> {
-  const wanted = process.env.WIKI_WRITE_KEY;
-  if (!wanted) return { ok: false, code: "locked", error: "Writing is off. Set WIKI_WRITE_KEY in the site's environment variables to turn it on." };
-  if (typeof input?.key !== "string" || !sameKey(input.key, wanted)) return { ok: false, code: "bad-key", error: "That write key is not right." };
+  if (!(await isOwner())) return { ok: false, code: "signed-out", error: "Sign in with your passkey to save." };
 
   const id = String(input.id ?? "").trim();
   const base = String(input.base ?? "");

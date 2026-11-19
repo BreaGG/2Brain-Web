@@ -5,14 +5,15 @@ import { useRouter } from "next/navigation";
 import { useApp } from "@/components/app/context";
 import { Dot, Icon, Select } from "@/components/ui";
 import NoteEditor, { NotePicker, type EditMode, type PickNote } from "./NoteEditor";
-import { KEY_STORE, MODE_STORE } from "./WriteNote";
+import { MODE_STORE } from "./WriteNote";
+import SignIn from "@/components/app/SignIn";
 import { editNote, type WriteResult } from "@/app/actions";
 import { buildSlugMap } from "@/lib/parser";
 import { singularType, typeLabel } from "@/lib/brain";
 
 /** Edit a note that is already in the wiki, in the same editor that writes new ones. */
 export default function EditNote({ i, accent, onDone }: { i: number; accent: string; onDone: () => void }) {
-  const { model, repo, colorOf, openNote } = useApp();
+  const { model, repo, colorOf, openNote, auth, refreshAuth } = useApp();
   const router = useRouter();
   const [pending, start] = useTransition();
   const note = model.notes[i];
@@ -56,21 +57,14 @@ export default function EditNote({ i, accent, onDone }: { i: number; accent: str
   const [picking, setPicking] = useState(false);
   const [body, setBody] = useState(start0.body);
   const [mode, setModeState] = useState<EditMode>("normal");
-  const [key, setKey] = useState("");
-  const [hasStoredKey, setHasStoredKey] = useState(false);
   const [result, setResult] = useState<WriteResult | null>(null);
   const [waiting, setWaiting] = useState(false);
 
   useEffect(() => {
     try {
       if (localStorage.getItem(MODE_STORE) === "markdown") setModeState("markdown");
-      const k = localStorage.getItem(KEY_STORE);
-      if (k) {
-        setKey(k);
-        setHasStoredKey(true);
-      }
     } catch {
-      /* storage unavailable: the key is asked each time */
+      /* storage unavailable: the editor starts in Normal mode */
     }
   }, []);
 
@@ -108,28 +102,18 @@ export default function EditNote({ i, accent, onDone }: { i: number; accent: str
     domainList.join("/") !== start0.domains.split(/[,/]/).map((d) => d.trim().toLowerCase()).filter(Boolean).join("/") ||
     sources.map((s) => s.short).join("|") !== start0.sources.map((s) => s.short).join("|") ||
     body.trim() !== start0.body.trim();
-  const canSave = changed && !!title.trim() && !!key && !pending && !waiting;
+  const canSave = changed && !!title.trim() && !!auth?.owner && !pending && !waiting;
 
   const submit = () => {
     setResult(null);
     start(async () => {
-      const res = await editNote({ key, id: note.id, base: start0.base, title, type, domains: domainList, sources: sources.map((s) => s.short), body });
+      const res = await editNote({ id: note.id, base: start0.base, title, type, domains: domainList, sources: sources.map((s) => s.short), body });
       setResult(res);
       if (res.ok) {
-        try {
-          localStorage.setItem(KEY_STORE, key);
-        } catch {
-          /* ignore */
-        }
         setWaiting(true);
         router.refresh();
-      } else if (res.code === "bad-key") {
-        try {
-          localStorage.removeItem(KEY_STORE);
-        } catch {
-          /* ignore */
-        }
-        setHasStoredKey(false);
+      } else if (res.code === "signed-out") {
+        void refreshAuth();
       }
     });
   };
@@ -194,12 +178,7 @@ export default function EditNote({ i, accent, onDone }: { i: number; accent: str
         {rich && <small className="write-warn">This note has tables or HTML, so it opens in Markdown to keep them exactly as they are.</small>}
       </div>
 
-      {!hasStoredKey && (
-        <label className="write-field">
-          <span className="label">Write key</span>
-          <input className="field-input" type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="current-password" placeholder="WIKI_WRITE_KEY" />
-        </label>
-      )}
+      <SignIn why="save your edit" />
 
       <div className="write-acts">
         <span className="write-dest">

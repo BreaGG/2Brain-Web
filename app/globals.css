@@ -3386,3 +3386,62 @@ button.row:hover .grow {
     bottom: calc(var(--tabs) + 96px);
   }
 }
+
+/* ── passkeys ───────────────────────────────────────────────────────────── */
+
+.signin {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  padding: 12px 14px;
+  border: 1px dashed var(--hair);
+}
+.signin .write-dest {
+  flex: 1 1 220px;
+}
+.signin .btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.signin .write-warn {
+  flex-basis: 100%;
+}
+.signin-row {
+  display: flex;
+  gap: 8px;
+  flex: 1 1 100%;
+}
+.signin-row input {
+  flex: 1;
+  min-width: 0;
+}
+.rail-auth {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  font-size: 10.5px;
+  color: var(--dim);
+  margin-top: 8px;
+}
+.rail-auth > * {
+  white-space: nowrap;
+}
+.rail-auth > span:first-child::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--l3);
+  vertical-align: 1px;
+}
+.rail-auth button {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

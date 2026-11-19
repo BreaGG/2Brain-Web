@@ -6,6 +6,7 @@ import type { PaneProps } from "@/components/app/Panes";
 import { Icon, PaneHead, Sect } from "@/components/ui";
 import WriteNote from "./WriteNote";
 import ImportSource from "./ImportSource";
+import SignIn from "@/components/app/SignIn";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -21,7 +22,7 @@ function template(t: (typeof TEMPLATES)[number], domain: string) {
 }
 
 export default function Add({ onClose }: PaneProps) {
-  const { repo, model, usingSample } = useApp();
+  const { repo, model, usingSample, demo } = useApp();
   const [copied, setCopied] = useState<string | null>(null);
   const folders = model.groups.folder.list.filter((f) => !f.unsorted);
   const domain = folders[0]?.key ?? "research";
@@ -42,11 +43,12 @@ export default function Add({ onClose }: PaneProps) {
     <>
       <PaneHead title="Add to your record" accent={ADD_ACCENT} onClose={onClose} />
       <div className="pane-body">
+        {!demo && !usingSample && <SignIn why="import and write notes" />}
         <Sect label="Import a PDF or web page" accent={ADD_ACCENT}>
-          <ImportSource />
+          <ImportSource hideSignIn />
         </Sect>
         <Sect label="Write a new note" accent={ADD_ACCENT}>
-          <WriteNote />
+          <WriteNote hideSignIn />
         </Sect>
         <p style={{ fontSize: 12.5, marginTop: 14, color: "var(--dim)" }}>
           {usingSample
