@@ -67,6 +67,10 @@ A note is read like this:
 Body with [[links]] to other notes.
 ```
 
+### Editing notes from the web
+
+With writing turned on (the same `WIKI_WRITE_KEY` and token as above), every note in the reader has an **Edit** button. It opens the same editor as a new note, filled with the note as it is: title, type, domain, sources and body. **Save changes** writes it back in one commit, sets "Last updated" to today and, when the title changed, updates the note's line in its folder index. Fields you did not touch (and any others, such as "Created") are kept exactly as written. Notes with tables or HTML open in Markdown mode so they come back unchanged. If the file changed on GitHub after you opened the editor, nothing is written and you are asked to sync and redo the edit.
+
 ## Development
 
 ```bash

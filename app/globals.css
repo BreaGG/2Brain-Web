@@ -1470,6 +1470,17 @@ button.row:hover .grow {
   color: var(--dim);
 }
 
+/* ── editing a note ─────────────────────────────────────────────────────── */
+
+.reader-edit {
+  height: 26px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+.write.edit .write-acts {
+  flex-wrap: wrap;
+}
+
 /* ── command bar ────────────────────────────────────────────────────────── */
 
 .scrim {

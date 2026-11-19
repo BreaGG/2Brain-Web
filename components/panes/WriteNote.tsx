@@ -8,7 +8,7 @@ import NoteEditor, { NotePicker, type EditMode, type PickNote } from "./NoteEdit
 import { writeNote, type WriteResult } from "@/app/actions";
 import { singularType, typeLabel } from "@/lib/brain";
 
-const KEY_STORE = "2brain.writeKey";
+export const KEY_STORE = "2brain.writeKey";
 
 /** Each kind of note starts with its section headings and room to write under each. */
 export const STARTERS: Record<string, string> = {
@@ -18,7 +18,7 @@ export const STARTERS: Record<string, string> = {
   synthesis: "## Claim\n\n## Built from",
 };
 
-const MODE_STORE = "2brain.editMode";
+export const MODE_STORE = "2brain.editMode";
 
 const PREFIX: Record<string, string> = { concept: "concept", person: "person", "source-summary": "source", synthesis: "synthesis" };
 

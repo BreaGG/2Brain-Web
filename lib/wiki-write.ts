@@ -1,4 +1,5 @@
 import "server-only";
+import { editedMarkdown, retitledIndex, sameText, type NoteEdit } from "./note-edit";
 
 /* ───────────────────────────────────────────────────────────────────────────
  * Writing to the wiki repository (GITHUB_OWNER / GITHUB_REPO).
@@ -18,7 +19,7 @@ function cfg() {
 
 export class WriteError extends Error {
   constructor(
-    public code: "not-configured" | "exists" | "github" | "invalid",
+    public code: "not-configured" | "exists" | "github" | "invalid" | "conflict" | "missing",
     message: string,
   ) {
     super(message);
@@ -161,6 +162,62 @@ export async function commitNote(n: NewNote): Promise<{ path: string; commitUrl:
       return { path, commitUrl: made!.html_url || `https://github.com/${owner}/${repo}/commit/${made!.sha}`, indexed };
     } catch (e) {
       // someone pushed in between: rebuild on the new head once
+      if (attempt === 0 && e instanceof WriteError && /422/.test(e.message)) continue;
+      throw e;
+    }
+  }
+  throw new WriteError("github", "The branch kept moving while saving; try again.");
+}
+
+/**
+ * Save an edit to a note that exists, in one commit; when the title changed, its
+ * entry in the folder index follows. `base` is the note as the editor opened it:
+ * if the file on GitHub has changed since, nothing is written.
+ */
+export async function commitEdit(id: string, base: string, edit: NoteEdit): Promise<{ path: string; commitUrl: string; indexed: string[] }> {
+  const { owner, repo } = cfg();
+  const meta = await gh<{ default_branch: string }>("");
+  const branch = meta!.default_branch;
+  const path = `wiki/${id}.md`;
+  const parts = id.split("/");
+  const slug = parts.pop()!;
+  const indexPath = parts.length ? `wiki/${parts.join("/")}/index.md` : null;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const ref = await gh<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(branch)}`);
+    const head = ref!.object.sha;
+    const current = await readFile(path, head);
+    if (current == null) throw new WriteError("missing", `${path} is no longer in the wiki.`);
+    if (!sameText(current, base)) throw new WriteError("conflict", "This note changed on GitHub after you opened it. Sync, open it again and redo your edit, so nothing is lost.");
+
+    const oldTitle = current.match(/^#\s+(.+)$/m)?.[1].trim() ?? slug;
+    const files: { path: string; content: string }[] = [{ path, content: editedMarkdown(current, edit, today()) }];
+    const indexed: string[] = [];
+    if (indexPath && slug !== "index") {
+      const index = await readFile(indexPath, head);
+      const next = index == null ? null : retitledIndex(index, slug, oldTitle, edit.title);
+      if (next != null) {
+        files.push({ path: indexPath, content: next });
+        indexed.push(indexPath);
+      }
+    }
+
+    const commit = await gh<{ tree: { sha: string } }>(`/git/commits/${head}`);
+    const tree = await gh<{ sha: string }>("/git/trees", {
+      method: "POST",
+      body: JSON.stringify({
+        base_tree: commit!.tree.sha,
+        tree: files.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.content })),
+      }),
+    });
+    const made = await gh<{ sha: string; html_url: string }>("/git/commits", {
+      method: "POST",
+      body: JSON.stringify({ message: `Edit ${edit.title}\n\nEdited from the 2Brain web app.`, tree: tree!.sha, parents: [head] }),
+    });
+    try {
+      await gh(`/git/refs/heads/${encodeURIComponent(branch)}`, { method: "PATCH", body: JSON.stringify({ sha: made!.sha, force: false }) });
+      return { path, commitUrl: made!.html_url || `https://github.com/${owner}/${repo}/commit/${made!.sha}`, indexed };
+    } catch (e) {
       if (attempt === 0 && e instanceof WriteError && /422/.test(e.message)) continue;
       throw e;
     }
