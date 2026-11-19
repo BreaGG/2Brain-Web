@@ -1421,6 +1421,55 @@ button.row:hover .grow {
   }
 }
 
+/* ── today ──────────────────────────────────────────────────────────────── */
+
+.today-big {
+  margin-top: 14px;
+  font-size: 46px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.today-week {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+.today-week button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  border: 1px solid transparent;
+}
+.today-week button:not(:disabled):hover {
+  border-color: var(--hair);
+}
+.today-week button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.today-week button[aria-current="date"] .label {
+  color: var(--ink);
+}
+.today-week .bar {
+  display: flex;
+  align-items: flex-end;
+  width: 10px;
+  height: 56px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+.today-week .bar i {
+  display: block;
+  width: 100%;
+  min-height: 0;
+}
+.today-week .n {
+  font-size: 11px;
+  color: var(--dim);
+}
+
 /* ── command bar ────────────────────────────────────────────────────────── */
 
 .scrim {

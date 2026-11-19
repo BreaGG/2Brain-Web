@@ -33,7 +33,7 @@ interface Props {
   writable?: boolean;
 }
 
-const PANE_IDS = new Set<PaneId>(["navigator", "numbers", "timeline", "you", "lab", "review", "files", "learn", "add"]);
+const PANE_IDS = new Set<PaneId>(["today", "navigator", "numbers", "timeline", "you", "lab", "review", "files", "learn", "add"]);
 
 export default function BrainApp({ pages, initialSlug, repo, usingSample, writable = false }: Props) {
   const [demo, setDemoState] = useState(false);

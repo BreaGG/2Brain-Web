@@ -2,6 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { NAV, type PaneId } from "./context";
+import Today from "@/components/panes/Today";
 import Navigator from "@/components/panes/Navigator";
 import Numbers from "@/components/panes/Numbers";
 import Timeline from "@/components/panes/Timeline";
@@ -14,6 +15,7 @@ import Add from "@/components/panes/Add";
 import Reader from "@/components/panes/Reader";
 
 const LABEL: Record<PaneId, string> = {
+  today: "Today",
   navigator: "Navigator",
   numbers: "Numbers",
   timeline: "Timeline",
@@ -49,6 +51,7 @@ export default function Panes({
         </button>
       )}
       <section className={`pane${pane === "navigator" ? " wide" : ""}`} key={pane} aria-label={LABEL[pane]}>
+        {pane === "today" && <Today {...props} />}
         {pane === "navigator" && <Navigator {...props} />}
         {pane === "numbers" && <Numbers {...props} />}
         {pane === "timeline" && <Timeline {...props} />}

@@ -4,7 +4,7 @@ import { createContext, useContext } from "react";
 import type { GroupBy, Model } from "@/lib/brain";
 import type { Settings } from "@/lib/settings";
 
-export type PaneId = "navigator" | "numbers" | "timeline" | "you" | "lab" | "review" | "files" | "learn" | "add" | "note";
+export type PaneId = "today" | "navigator" | "numbers" | "timeline" | "you" | "lab" | "review" | "files" | "learn" | "add" | "note";
 
 export type Focus =
   | { kind: "none" }
@@ -14,6 +14,7 @@ export type Focus =
 
 export const NAV: { id: PaneId | "brain"; label: string; accent: string; hint: string }[] = [
   { id: "brain", label: "Brain", accent: "var(--l0)", hint: "The whole record, as a brain" },
+  { id: "today", label: "Today", accent: "var(--l7)", hint: "What you wrote today, lit in the brain" },
   { id: "navigator", label: "Navigator", accent: "var(--l1)", hint: "Folders and every note in them" },
   { id: "numbers", label: "Numbers", accent: "var(--l2)", hint: "The record, counted" },
   { id: "timeline", label: "Timeline", accent: "var(--l3)", hint: "What you wrote and when" },
