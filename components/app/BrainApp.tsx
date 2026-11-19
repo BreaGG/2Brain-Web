@@ -31,11 +31,13 @@ interface Props {
   usingSample: boolean;
   /** Writing new notes to the wiki repository is turned on (WIKI_WRITE_KEY is set). */
   writable?: boolean;
+  /** Questions can be put to Claude (an Anthropic API key and the write key are set). */
+  askable?: boolean;
 }
 
-const PANE_IDS = new Set<PaneId>(["today", "navigator", "numbers", "timeline", "you", "lab", "review", "files", "learn", "add"]);
+const PANE_IDS = new Set<PaneId>(["today", "ask", "navigator", "numbers", "timeline", "you", "lab", "review", "files", "learn", "add"]);
 
-export default function BrainApp({ pages, initialSlug, repo, usingSample, writable = false }: Props) {
+export default function BrainApp({ pages, initialSlug, repo, usingSample, writable = false, askable = false }: Props) {
   const [demo, setDemoState] = useState(false);
   const demoPages = useMemo(() => (demo ? sampleWikiFiles().map((f) => parsePage(f.path, f.content)) : null), [demo]);
   const model = useMemo(() => buildModel(demoPages ?? pages), [pages, demoPages]);
@@ -300,6 +302,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
         .sort((a, b) => (model.notes[a].date ?? Infinity) - (model.notes[b].date ?? Infinity) || model.notes[a].id.localeCompare(model.notes[b].id)),
     [model],
   );
+  const [askSeed, setAskSeed] = useState<{ q: string; n: number } | null>(null);
   const [growth, setGrowth] = useState<{ k: number; playing: boolean } | null>(null);
   const shownK = growth ? Math.floor(growth.k) : N;
   useEffect(() => {
@@ -389,6 +392,12 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
     setGestures,
     replaceSettings,
     writable: writable && !demo,
+    askable: askable && !demo,
+    askSeed,
+    askBrain: (q: string) => {
+      setAskSeed({ q, n: Date.now() });
+      openPane("ask");
+    },
     startTour: () => setTour(true),
     growOrder,
     growth,

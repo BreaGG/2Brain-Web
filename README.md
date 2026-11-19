@@ -73,6 +73,15 @@ Body with [[links]] to other notes.
 
 With writing turned on (the same `WIKI_WRITE_KEY` and token as above), every note in the reader has an **Edit** button. It opens the same editor as a new note, filled with the note as it is: title, type, domain, sources and body. **Save changes** writes it back in one commit, sets "Last updated" to today and, when the title changed, updates the note's line in its folder index. Fields you did not touch (and any others, such as "Created") are kept exactly as written. Notes with tables or HTML open in Markdown mode so they come back unchanged. If the file changed on GitHub after you opened the editor, nothing is written and you are asked to sync and redo the edit.
 
+### Asking your brain (Claude)
+
+The **Ask** pane (in the rail, the speech-bubble button in the find bar, or "Ask: …" in ⌘K) puts a question to Claude (Claude Sonnet 5.5) about your notes. The server picks the notes closest to the question by their words, sends them with a one-line catalog of every note, and Claude answers with `[[links]]` to the notes it used; if the catalog shows other notes that look relevant (for example a question in Spanish about notes written in English), Claude reads those too before answering. The notes it reads light up in the brain as it works, and the ones in the answer stay lit when it is done.
+
+To turn it on, add to the site's environment variables:
+
+- `ANTHROPIC_API_KEY`: an API key from console.anthropic.com. Every question is billed to it: a few cents each (around 15-20k input tokens, and the catalog is cached between questions).
+- `WIKI_WRITE_KEY`: the same key as for writing notes. Asking asks for it once per device, so nobody else can spend on your API key.
+
 ## Development
 
 ```bash

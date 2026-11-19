@@ -3150,3 +3150,82 @@ button.row:hover .grow {
   border-color: var(--l0) !important;
   color: var(--l0);
 }
+
+/* ── ask your brain ─────────────────────────────────────────────────────── */
+
+.ask-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ask-input {
+  resize: vertical;
+  min-height: 56px;
+  font-size: 15px;
+  line-height: 1.4;
+  padding: 10px 12px;
+}
+.ask-acts {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.ask-acts .btn {
+  flex: none;
+}
+.ask-acts .btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.ask-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 16px;
+}
+.ask-turn {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hair);
+}
+.ask-q {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  margin-bottom: 10px;
+}
+.ask-status {
+  color: var(--dim);
+  animation: askPulse 1.4s ease-in-out infinite;
+}
+@keyframes askPulse {
+  50% {
+    opacity: 0.4;
+  }
+}
+.ask-read,
+.ask-earlier {
+  margin-top: 14px;
+  font-size: 13px;
+}
+.ask-read summary,
+.ask-earlier summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  list-style: none;
+  color: var(--dim);
+}
+.ask-read summary::-webkit-details-marker,
+.ask-earlier summary::-webkit-details-marker {
+  display: none;
+}
+.ask-read[open] summary svg {
+  transform: rotate(180deg);
+}
+.ask-earlier summary {
+  padding: 6px 0;
+  color: var(--ink);
+}
