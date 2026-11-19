@@ -281,3 +281,15 @@ export async function commitImport(source: { path: string; bytes: Buffer }, file
   }
   throw new WriteError("github", "The branch kept moving while saving; try again.");
 }
+
+/** Write one text file to the repository's default branch (the passkey list), creating or replacing it. */
+export async function putRepoText(path: string, content: string, message: string) {
+  const meta = await gh<{ default_branch: string }>("");
+  const branch = meta!.default_branch;
+  const enc = path.split("/").map(encodeURIComponent).join("/");
+  const now = await gh<{ sha?: string }>(`/contents/${enc}?ref=${encodeURIComponent(branch)}`, { allow404: true });
+  await gh(`/contents/${enc}`, {
+    method: "PUT",
+    body: JSON.stringify({ message, content: Buffer.from(content, "utf-8").toString("base64"), branch, ...(now?.sha ? { sha: now.sha } : {}) }),
+  });
+}

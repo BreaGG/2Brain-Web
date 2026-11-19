@@ -7,8 +7,8 @@ import { Dot, Icon, Select } from "@/components/ui";
 import NoteEditor, { NotePicker, type EditMode, type PickNote } from "./NoteEditor";
 import { writeNote, type WriteResult } from "@/app/actions";
 import { singularType, typeLabel } from "@/lib/brain";
+import SignIn from "@/components/app/SignIn";
 
-export const KEY_STORE = "2brain.writeKey";
 
 /** Each kind of note starts with its section headings and room to write under each. */
 export const STARTERS: Record<string, string> = {
@@ -32,8 +32,9 @@ export function slugify(s: string) {
     .slice(0, 80);
 }
 
-export default function WriteNote() {
-  const { model, writable, repo, usingSample, demo, openNote, setFocus, colorOf } = useApp();
+export default function WriteNote({ hideSignIn = false }: { hideSignIn?: boolean }) {
+  const { model, writable, repo, usingSample, demo, openNote, setFocus, colorOf, auth, refreshAuth } = useApp();
+  const owner = !!auth?.owner;
   const router = useRouter();
   const [pending, start] = useTransition();
 
@@ -71,22 +72,14 @@ export default function WriteNote() {
       /* per-device preference only */
     }
   };
-  const [key, setKey] = useState("");
-  const [remember, setRemember] = useState(true);
-  const [hasStoredKey, setHasStoredKey] = useState(false);
   const [result, setResult] = useState<WriteResult | null>(null);
   const [waitFor, setWaitFor] = useState<string | null>(null);
 
   useEffect(() => {
     try {
       if (localStorage.getItem(MODE_STORE) === "markdown") setModeState("markdown");
-      const k = localStorage.getItem(KEY_STORE);
-      if (k) {
-        setKey(k);
-        setHasStoredKey(true);
-      }
     } catch {
-      /* storage unavailable: the key is asked each time */
+      /* storage unavailable: the editor starts in Normal mode */
     }
   }, []);
 
@@ -115,7 +108,7 @@ export default function WriteNote() {
             ? "You are looking at the demo brain; go back to yours to write."
             : usingSample
               ? "This copy shows the sample wiki. Set GITHUB_OWNER, GITHUB_REPO and GITHUB_TOKEN to connect yours."
-              : "To write new notes from here, add a WIKI_WRITE_KEY of your choosing to the site's environment variables and make sure GITHUB_TOKEN can write to the repository's contents."}
+              : "To write new notes from here, make sure GITHUB_TOKEN can write to the repository's contents."}
         </p>
       </div>
     );
@@ -124,7 +117,6 @@ export default function WriteNote() {
   const submit = () => {
     setResult(null);
     const input = {
-      key,
       title,
       type,
       folder: realFolder,
@@ -137,12 +129,6 @@ export default function WriteNote() {
       const res = await writeNote(input);
       setResult(res);
       if (res.ok) {
-        try {
-          if (remember) localStorage.setItem(KEY_STORE, key);
-          else localStorage.removeItem(KEY_STORE);
-        } catch {
-          /* ignore */
-        }
         setFocus({ kind: "none" });
         setWaitFor(res.slug);
         setTitle("");
@@ -152,18 +138,13 @@ export default function WriteNote() {
         setLoadKey((k) => k + 1);
         setSources([]);
         router.refresh();
-      } else if (res.code === "bad-key") {
-        try {
-          localStorage.removeItem(KEY_STORE);
-        } catch {
-          /* ignore */
-        }
-        setHasStoredKey(false);
+      } else if (res.code === "signed-out") {
+        void refreshAuth();
       }
     });
   };
 
-  const canSave = !!title.trim() && !!realFolder && !!fileSlug && !taken && !!key && !pending;
+  const canSave = !!title.trim() && !!realFolder && !!fileSlug && !taken && owner && !pending;
 
   return (
     <form
@@ -279,17 +260,7 @@ export default function WriteNote() {
       </details>
       {taken && <small className="write-warn">A note called “{fileSlug}” already exists in {realFolder}. Change the title or the file name.</small>}
 
-      {!hasStoredKey && (
-        <div className="write-row">
-          <label className="write-field">
-            <span className="label">Write key</span>
-            <input className="field-input" type="password" value={key} onChange={(e) => setKey(e.target.value)} autoComplete="current-password" placeholder="WIKI_WRITE_KEY" />
-          </label>
-          <label className="write-remember">
-            <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> Remember on this device
-          </label>
-        </div>
-      )}
+      {!hideSignIn && <SignIn why="save notes to your wiki" />}
 
       <div className="write-acts">
         <span className="write-dest">
@@ -299,23 +270,6 @@ export default function WriteNote() {
           {pending ? "Saving…" : "Save to GitHub"}
         </button>
       </div>
-      {hasStoredKey && (
-        <button
-          type="button"
-          className="link write-forget"
-          onClick={() => {
-            try {
-              localStorage.removeItem(KEY_STORE);
-            } catch {
-              /* ignore */
-            }
-            setKey("");
-            setHasStoredKey(false);
-          }}
-        >
-          Forget the write key on this device
-        </button>
-      )}
 
       {result && (
         <div className={`write-result${result.ok ? " ok" : " bad"}`} role="status">

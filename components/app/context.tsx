@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 import type { GroupBy, Model } from "@/lib/brain";
 import type { Settings } from "@/lib/settings";
+import type { AuthState } from "@/lib/passkey-client";
 
 export type PaneId = "today" | "ask" | "navigator" | "numbers" | "timeline" | "you" | "lab" | "review" | "files" | "learn" | "add" | "note";
 
@@ -59,6 +60,9 @@ export interface AppApi {
   setDemo: (v: boolean) => void;
   /** Growth: the notes in the order they were written, and how many of them are shown (null when off). */
   askable: boolean;
+  /** Whether the owner is signed in with a passkey on this device (null while checking). */
+  auth: AuthState | null;
+  refreshAuth: () => Promise<void>;
   /** A question to start the Ask pane with (from the find bar or ⌘K). */
   askSeed: { q: string; n: number } | null;
   askBrain: (q: string) => void;

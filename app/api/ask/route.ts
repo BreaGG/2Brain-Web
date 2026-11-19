@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { isOwner } from "@/lib/auth";
 import { getAllPages } from "@/lib/wiki";
 import { ASK_MODEL, notesBlock, pickNotes, systemPrompt, userTurn } from "@/lib/ask";
 
@@ -8,15 +8,10 @@ import { ASK_MODEL, notesBlock, pickNotes, systemPrompt, userTurn } from "@/lib/
  *   {"type":"text","text":"..."}  the answer, as it is written
  *   {"type":"reset"}              Claude stopped to read more notes: what it wrote so far is dropped
  *   {"type":"done","stop":"..."}  or {"type":"error","error":"..."}
- * The write key guards it: every question is billed to the site's API key. */
+ * Only the signed-in owner may ask: every question is billed to the site's API key. */
 
 export const maxDuration = 120;
 
-function sameKey(given: string, wanted: string) {
-  const a = createHash("sha256").update(given).digest();
-  const b = createHash("sha256").update(wanted).digest();
-  return timingSafeEqual(a, b);
-}
 
 const json = (status: number, body: object) => Response.json(body, { status });
 
@@ -24,17 +19,16 @@ const json = (status: number, body: object) => Response.json(body, { status });
 let last = 0;
 
 export async function POST(req: Request) {
-  const wanted = process.env.WIKI_WRITE_KEY;
-  if (!process.env.ANTHROPIC_API_KEY || !wanted) {
-    return json(503, { code: "not-configured", error: "Asking is off. Set ANTHROPIC_API_KEY and WIKI_WRITE_KEY in the site's environment variables to turn it on." });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return json(503, { code: "not-configured", error: "Asking is off. Set ANTHROPIC_API_KEY in the site's environment variables to turn it on." });
   }
-  let body: { question?: unknown; key?: unknown };
+  if (!(await isOwner())) return json(401, { code: "signed-out", error: "Sign in with your passkey to ask." });
+  let body: { question?: unknown };
   try {
     body = await req.json();
   } catch {
     return json(400, { code: "invalid", error: "Send a question." });
   }
-  if (typeof body.key !== "string" || !sameKey(body.key, wanted)) return json(401, { code: "bad-key", error: "That write key is not right." });
   const question = String(body.question ?? "").replace(/\s+/g, " ").trim();
   if (question.length < 3 || question.length > 1_000) return json(400, { code: "invalid", error: "Ask a question of up to 1,000 characters." });
   const now = Date.now();

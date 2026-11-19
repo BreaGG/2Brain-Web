@@ -6,6 +6,7 @@ import { syncWiki } from "@/app/actions";
 import { useApp, NAV, ADD_ACCENT } from "./context";
 import { Icon, Wordmark } from "@/components/ui";
 import { SPECTRUM } from "@/lib/palettes";
+import { createPasskey, signIn, signOut } from "@/lib/passkey-client";
 
 export default function Rail({ open, onHome }: { open: boolean; onHome: () => void }) {
   const { pane, openPane, openCommand, model } = useApp();
@@ -98,6 +99,7 @@ export default function Rail({ open, onHome }: { open: boolean; onHome: () => vo
           <span>Review {figs.issues}</span>
         </button>
         <SyncStatus count={model.notes.length} />
+        <AuthStatus />
       </div>
     </nav>
   );
@@ -278,6 +280,47 @@ function SyncStatus({ count }: { count: number }) {
       <button type="button" className="sync" onClick={sync} disabled={busy} title="Fetch the wiki from GitHub now">
         Sync
       </button>
+    </div>
+  );
+}
+
+/** Signed in with a passkey or not, with a way to sign in, add this device, or sign out. */
+function AuthStatus() {
+  const { auth, refreshAuth, writable } = useApp();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  if (!writable || !auth?.available || (!auth.owner && !auth.registered)) return null;
+  const run = async (f: () => Promise<void>, done?: string) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await f();
+      await refreshAuth();
+      if (done) setMsg(done);
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rail-auth" role="status">
+      {auth.owner ? (
+        <>
+          <span>Signed in</span>
+          <button type="button" disabled={busy} title="Add a passkey made on this device (for a device whose passkeys do not sync with your others)" onClick={() => run(() => createPasskey(), "Passkey added")}>
+            Add device
+          </button>
+          <button type="button" disabled={busy} onClick={() => run(() => signOut())}>
+            Sign out
+          </button>
+        </>
+      ) : (
+        <button type="button" disabled={busy} onClick={() => run(() => signIn())}>
+          {busy ? "Waiting for your device…" : "Sign in with passkey"}
+        </button>
+      )}
+      {msg && <span className="rail-auth-msg">{msg}</span>}
     </div>
   );
 }
