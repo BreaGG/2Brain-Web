@@ -3229,3 +3229,126 @@ button.row:hover .grow {
   padding: 6px 0;
   color: var(--ink);
 }
+
+/* ── importing a source ─────────────────────────────────────────────────── */
+
+.drop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+  padding: 14px 16px;
+  border: 1px dashed var(--hair);
+  font-size: 13px;
+  color: var(--dim);
+  cursor: pointer;
+  transition: border-color var(--fast) var(--ease);
+}
+.drop:hover,
+.drop.has {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.drop input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.drop > span:not(.label) {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.import-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 4px 0 0;
+  padding: 10px 12px;
+  border-left: 2px solid var(--accent, var(--ink));
+  font-size: 12px;
+  max-height: 260px;
+  overflow: auto;
+}
+.import-steps li {
+  overflow-wrap: anywhere;
+}
+.import-steps .label {
+  display: inline-block;
+  min-width: 58px;
+  color: var(--dim);
+}
+.import-steps li.write {
+  color: var(--ink);
+}
+.import-steps .note {
+  color: var(--dim);
+  font-style: italic;
+}
+.import-review {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.import-file {
+  border: 1px solid var(--hair);
+}
+.import-file summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 12.5px;
+  font-family: var(--mono);
+}
+.import-file summary::-webkit-details-marker {
+  display: none;
+}
+.import-file summary .grow {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.import-file[open] summary svg {
+  transform: rotate(180deg);
+}
+.import-file pre {
+  max-height: 320px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--hair);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.import-file .tag {
+  flex: none;
+  padding: 1px 6px;
+  font-family: var(--font, inherit);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+.import-file .tag.new {
+  color: var(--l3);
+}
+.import-file .tag.upd {
+  color: var(--l1);
+}
+.import-steps li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+}
+.import-steps .label {
+  flex: none;
+}

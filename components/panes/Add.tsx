@@ -5,6 +5,7 @@ import { useApp, ADD_ACCENT } from "@/components/app/context";
 import type { PaneProps } from "@/components/app/Panes";
 import { Icon, PaneHead, Sect } from "@/components/ui";
 import WriteNote from "./WriteNote";
+import ImportSource from "./ImportSource";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -41,6 +42,9 @@ export default function Add({ onClose }: PaneProps) {
     <>
       <PaneHead title="Add to your record" accent={ADD_ACCENT} onClose={onClose} />
       <div className="pane-body">
+        <Sect label="Import a PDF or web page" accent={ADD_ACCENT}>
+          <ImportSource />
+        </Sect>
         <Sect label="Write a new note" accent={ADD_ACCENT}>
           <WriteNote />
         </Sect>

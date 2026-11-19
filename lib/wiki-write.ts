@@ -224,3 +224,60 @@ export async function commitEdit(id: string, base: string, edit: NoteEdit): Prom
   }
   throw new WriteError("github", "The branch kept moving while saving; try again.");
 }
+
+/** A text file from the wiki repository's default branch (for example its CLAUDE.md), or null. */
+export async function readRepoText(path: string): Promise<string | null> {
+  const meta = await gh<{ default_branch: string }>("");
+  return readFile(path, meta!.default_branch);
+}
+
+export interface StagedFile {
+  path: string;
+  content: string;
+  /** What the file held when it was read, or null for a new file. */
+  before: string | null;
+}
+
+/**
+ * Commit an import in one go: the source file as it was uploaded (binary allowed) and the
+ * pages written from it. A page that changed on GitHub since it was read stops the commit.
+ */
+export async function commitImport(source: { path: string; bytes: Buffer }, files: StagedFile[], message: string): Promise<{ commitUrl: string }> {
+  const { owner, repo } = cfg();
+  const meta = await gh<{ default_branch: string }>("");
+  const branch = meta!.default_branch;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const ref = await gh<{ object: { sha: string } }>(`/git/ref/heads/${encodeURIComponent(branch)}`);
+    const head = ref!.object.sha;
+    for (const f of files) {
+      const now = await readFile(f.path, head);
+      if (f.before == null ? now != null : now == null || !sameText(now, f.before))
+        throw new WriteError("conflict", `${f.path} changed on GitHub after the notes were drafted. Import the file again so nothing is lost.`);
+    }
+    if ((await readFile(source.path, head)) != null) throw new WriteError("exists", `${source.path} is already in the wiki. Rename the file to import it again.`);
+    const blob = await gh<{ sha: string }>("/git/blobs", { method: "POST", body: JSON.stringify({ content: source.bytes.toString("base64"), encoding: "base64" }) });
+    const commit = await gh<{ tree: { sha: string } }>(`/git/commits/${head}`);
+    const tree = await gh<{ sha: string }>("/git/trees", {
+      method: "POST",
+      body: JSON.stringify({
+        base_tree: commit!.tree.sha,
+        tree: [
+          { path: source.path, mode: "100644", type: "blob", sha: blob!.sha },
+          ...files.map((f) => ({ path: f.path, mode: "100644", type: "blob", content: f.content })),
+        ],
+      }),
+    });
+    const made = await gh<{ sha: string; html_url: string }>("/git/commits", {
+      method: "POST",
+      body: JSON.stringify({ message, tree: tree!.sha, parents: [head] }),
+    });
+    try {
+      await gh(`/git/refs/heads/${encodeURIComponent(branch)}`, { method: "PATCH", body: JSON.stringify({ sha: made!.sha, force: false }) });
+      return { commitUrl: made!.html_url || `https://github.com/${owner}/${repo}/commit/${made!.sha}` };
+    } catch (e) {
+      if (attempt === 0 && e instanceof WriteError && /422/.test(e.message)) continue;
+      throw e;
+    }
+  }
+  throw new WriteError("github", "The branch kept moving while saving; try again.");
+}
