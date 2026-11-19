@@ -1,7 +1,7 @@
 import type { Grouping, Model } from "@/lib/brain";
 import { monthLabel, monthRange, monthKey } from "@/lib/brain";
 import { squarify } from "@/lib/squarify";
-import { OWN_TYPES, WEEKDAYS, axisOf, weekdayOf, type AnswerKey, type AxisKey, type FormKey } from "@/lib/table";
+import { OWN_TYPES, WEEKDAYS, axisOf, daysAgo, lastWritten, rankSeries, weekdayOf, type AnswerKey, type AxisKey, type FormKey } from "@/lib/table";
 import { FRAME_CY, rng, type Anatomy, type Layout, type LayoutLabel } from "./anatomy";
 
 /* ───────────────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ export function buildForm(model: Model, anat: Anatomy, spec: FormSpec): Layout {
   };
 
   const key = spec.answer
-    ? `answer:${spec.answer}:${spec.grouping.list.length}${spec.answer === "flow" ? `:${spec.across}:${spec.down}:${spec.counts}` : ""}`
+    ? `answer:${spec.answer}:${spec.grouping.list.length}${spec.answer === "flow" ? `:${spec.across}:${spec.down}:${spec.counts}` : spec.answer === "columns" ? `:${spec.counts}` : ""}`
     : `form:${spec.form}:${spec.across}:${spec.down}:${spec.counts}`;
 
   if (spec.answer) {
@@ -685,6 +685,140 @@ function answerPlace(
         const h = T.at_(s[own ? 0 : 1] ?? [], px) * scale;
         const y = (isNote ? 0.5 : Math.sqrt(r())) * h;
         return [px, own ? CY + y : CY - y, (r() - 0.5) * 0.06];
+      };
+    }
+    case "columns": {
+      // a column per month, stacked by group, its height the record written that month
+      const s = series((i) => g.of[i], 0);
+      const tot = new Array(T.M).fill(0).map((_, m) => s.reduce((a, v) => a + v[m], 0));
+      const scale = (H * 0.92) / Math.max(1e-6, ...tot);
+      const cw = W / T.M;
+      const bw = Math.min(0.9, cw * 0.72);
+      const base = s.map((_, gi) => tot.map((_, m) => Y0 + s.slice(0, gi).reduce((a, v) => a + v[m], 0) * scale));
+      const per = new Array(T.M).fill(0);
+      notes.forEach((x) => {
+        if (x.date != null) per[T.at.get(monthKey(x.date)) ?? 0]++;
+      });
+      const pile = undatedPile(X0 + W + 0.6, Y0 + 0.3);
+      T.ticks(b, Y0 - 0.2);
+      b.line([X0, Y0, 0], [X0 + W, Y0, 0]);
+      if (spec.counts) per.forEach((c, m) => c && b.label(String(c), X0 + (m + 0.5) * cw, Y0 + tot[m] * scale + 0.16, "count"));
+      return (i, isNote) => {
+        const x = notes[i];
+        if (x.date == null) return pile ? pile(i, isNote) : [0, CY, 0];
+        const m = T.at.get(monthKey(x.date)) ?? 0;
+        const gi = g.of[i];
+        const th = s[gi][m] * scale;
+        return [X0 + (m + 0.5) * cw + (r() - 0.5) * bw * (isNote ? 0.6 : 1), base[gi][m] + (isNote ? 0.2 + r() * 0.6 : r()) * th, (r() - 0.5) * 0.06];
+      };
+    }
+    case "bars": {
+      // a bar per group, longest first, its length the record it holds
+      const order = g.list.map((_, gi) => gi).sort((a, c) => g.list[c].record - g.list[a].record);
+      const row = new Int32Array(G);
+      order.forEach((gi, k) => (row[gi] = k));
+      const rowH = Math.min(0.75, H / G);
+      const top = CY + (G * rowH) / 2;
+      const maxRec = Math.max(1, ...g.list.map((x) => x.record));
+      const len = (gi: number) => Math.max(0.08, (W * 0.82 * g.list[gi].record) / maxRec);
+      const yOf = (gi: number) => top - (row[gi] + 0.5) * rowH;
+      const slot = new Int32Array(notes.length);
+      const seen = new Int32Array(G);
+      notes.forEach((_, i) => (slot[i] = seen[g.of[i]]++));
+      g.list.forEach((x, gi) => {
+        b.label(x.label, X0 - 0.15, yOf(gi), "axisL", 0, gi);
+        b.label(`${x.notes} · ${x.record.toLocaleString("en")}`, X0 + len(gi) + 0.15, yOf(gi), "axis", 0, gi);
+      });
+      b.line([X0, top, 0], [X0, top - G * rowH, 0]);
+      return (i, isNote) => {
+        const gi = g.of[i];
+        const L = len(gi);
+        if (isNote) return [X0 + ((slot[i] + 0.5) / Math.max(1, seen[gi])) * L, yOf(gi), 0.02];
+        return [X0 + r() * L, yOf(gi) + (r() - 0.5) * rowH * 0.62, (r() - 0.5) * 0.06];
+      };
+    }
+    case "ranks": {
+      // a bump chart: each group's place by everything written so far, month by month
+      const { rank } = rankSeries(model, g, weight);
+      const rowH = Math.min(0.8, H / Math.max(1, G - 1));
+      const top = CY + ((G - 1) * rowH) / 2;
+      const ys = rank.map((v) => v.map((k) => top - k * rowH));
+      const xm = (m: number) => X0 + ((m + 0.5) / T.M) * W;
+      const pile = undatedPile(X0 + W + 2.2, Y0 + 0.2);
+      T.ticks(b, top - (G - 1) * rowH - 0.45);
+      ys.forEach((v, gi) => {
+        for (let m = 1; m < v.length; m++) {
+          // an S between months, so crossings read as overtakes
+          const steps = 8;
+          for (let k = 0; k < steps; k++) {
+            const f0 = k / steps;
+            const f1 = (k + 1) / steps;
+            const e = (f: number) => f * f * (3 - 2 * f);
+            b.line([lerp(xm(m - 1), xm(m), f0), lerp(v[m - 1], v[m], e(f0)), 0], [lerp(xm(m - 1), xm(m), f1), lerp(v[m - 1], v[m], e(f1)), 0], gi);
+          }
+        }
+        if (v.length) {
+          // clear of the month's cloud of points
+          const half = W / T.M / 2;
+          b.label(g.list[gi].label, xm(v.length - 1) + half + 0.15, v[v.length - 1], "axis", 0, gi);
+          b.label(`#${rank[gi][0] + 1}`, xm(0) - half - 0.15, v[0], "axisL", 0, gi);
+        }
+      });
+      const yAt = (gi: number, x: number) => {
+        const f = Math.max(0, Math.min(T.M - 1, ((x - X0) / W) * T.M - 0.5));
+        const a = Math.floor(f);
+        const c = Math.min(T.M - 1, a + 1);
+        const t = f - a;
+        return lerp(ys[gi][a] ?? top, ys[gi][c] ?? top, t * t * (3 - 2 * t));
+      };
+      return (i, isNote) => {
+        const x = notes[i];
+        if (x.date == null) return pile ? pile(i, isNote) : [0, CY, 0];
+        const gi = g.of[i];
+        const px = T.x(x.date, r, isNote ? 0 : 0.8);
+        return [px, yAt(gi, px) + (isNote ? 0 : gauss(r) * rowH * 0.08), (r() - 0.5) * 0.05];
+      };
+    }
+    case "quiet": {
+      // a row per group, the quietest at the top: what was written, then the silence up to today
+      const now = Math.max(Date.now(), model.dateMax ?? 0);
+      const t0 = model.dateMin ?? now - 365 * DAY;
+      const spanT = Math.max(DAY, now - t0);
+      const xOf = (t: number) => X0 + ((t - t0) / spanT) * W;
+      const last = lastWritten(model, g);
+      const order = g.list.map((_, gi) => gi).sort((a, c) => (last[a] ?? Infinity) - (last[c] ?? Infinity));
+      const row = new Int32Array(G);
+      order.forEach((gi, k) => (row[gi] = k));
+      const rowH = Math.min(0.85, H / G);
+      const top = CY + (G * rowH) / 2;
+      const yOf = (gi: number) => top - (row[gi] + 0.5) * rowH;
+      const bottom = top - G * rowH;
+      const s = step(Math.round(spanT / (30.4 * DAY)) + 1, 7);
+      for (let k = monthKey(t0); k <= monthKey(now); k += s) {
+        const t = Date.UTC(Math.floor(k / 12), k % 12, 1);
+        if (t >= t0) b.label(monthLabel(k), xOf(t), bottom - 0.25, "axis");
+      }
+      b.line([X0 + W, top + 0.1, 0], [X0 + W, bottom - 0.05, 0]);
+      b.label("Today", X0 + W, top + 0.3, "axis");
+      g.list.forEach((x, gi) => {
+        const y = yOf(gi);
+        b.label(x.label, X0 - 0.15, y, "axisL", 0, gi);
+        const t = last[gi];
+        if (t == null) return;
+        // the silence: a dotted run from the last note to today
+        const xa = xOf(t);
+        const dots = Math.floor((X0 + W - xa) / 0.14);
+        for (let k = 0; k < dots; k++) b.line([xa + k * 0.14 + 0.03, y, 0], [xa + k * 0.14 + 0.08, y, 0]);
+        const d = daysAgo(t, now);
+        b.label(d < 14 ? "active" : d < 60 ? `${d} days` : `${Math.round(d / 30.4)} months`, X0 + W + 0.32, y, "axis", 0, gi);
+      });
+      const pile = undatedPile(X0 + W + 1.9, bottom + 0.2);
+      return (i, isNote) => {
+        const x = notes[i];
+        if (x.date == null) return pile ? pile(i, isNote) : [0, CY, 0];
+        const y = yOf(g.of[i]);
+        const px = xOf(x.date + (isNote ? 0 : (r() - 0.5) * 6 * DAY));
+        return [Math.min(X0 + W, Math.max(X0, px)), y + (isNote ? 0 : gauss(r) * rowH * 0.1), (r() - 0.5) * 0.05];
       };
     }
     default:
