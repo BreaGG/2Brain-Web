@@ -10,6 +10,7 @@ import { buildSlugMap } from "@/lib/parser";
 import { singularType } from "@/lib/brain";
 import SignIn from "@/components/app/SignIn";
 import { WIKI, linkify } from "./Reader";
+import { settled } from "@/lib/stream-md";
 
 interface Turn {
   q: string;
@@ -240,7 +241,7 @@ export default function Ask({ accent, onClose }: PaneProps) {
             <p className="ask-q">{now.q}</p>
             {now.state === "reading" && <p className="ask-status label">Choosing the notes to read…</p>}
             {now.state === "writing" && !now.text && <p className="ask-status label">Reading {now.read.length} notes…</p>}
-            {now.text && md(now.text)}
+            {now.text && md(now.state === "done" ? now.text : settled(now.text))}
             {now.state === "error" && <p className="write-result bad">{now.error}</p>}
             {now.state === "done" && cited(now.text).length > 0 && (
               <Sect label={`In the answer · ${cited(now.text).length}`} accent={accent} aside={<button type="button" className="link" onClick={() => lightSet(cited(now.text), "the notes in the answer", "ask")}>Light them</button>}>
