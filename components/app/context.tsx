@@ -56,6 +56,10 @@ export interface AppApi {
   /** Showing the built-in demo brain instead of the wiki. */
   demo: boolean;
   setDemo: (v: boolean) => void;
+  /** Growth: the notes in the order they were written, and how many of them are shown (null when off). */
+  growOrder: number[];
+  growth: { k: number; playing: boolean } | null;
+  setGrowth: (g: { k: number; playing: boolean } | null) => void;
 }
 
 export const AppCtx = createContext<AppApi | null>(null);

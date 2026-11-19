@@ -1001,6 +1001,67 @@ button.row:hover .grow {
   min-height: 14px;
 }
 
+.activity-grow {
+  position: absolute;
+  top: -22px;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--hair);
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.activity-grow:hover {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+/* ── growth: the record played back ────────────────────────────────────── */
+
+.growth-bar {
+  position: absolute;
+  z-index: 7;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: grid;
+  grid-template-columns: auto minmax(120px, 260px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: min(720px, calc(100% - 32px));
+  padding: 6px 6px 6px 8px;
+  border: 1px solid var(--ink);
+  background: var(--bg);
+  font-size: var(--t1);
+  animation: vizIn var(--slow) var(--ease);
+}
+.growth-cap {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+  white-space: nowrap;
+}
+.growth-cap > span {
+  color: var(--dim);
+}
+.growth-cap .growth-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--c, var(--ink));
+}
+.grow-btn {
+  height: 24px;
+  padding: 0 10px;
+  font-size: 12px;
+  margin-right: 8px;
+}
+
 .tooltip {
   position: fixed;
   z-index: 60;
@@ -2803,6 +2864,19 @@ button.row:hover .grow {
   .focus-chip {
     top: 10px;
     max-width: calc(100% - 24px);
+  }
+  .growth-bar {
+    top: 10px;
+    width: calc(100% - 24px);
+    grid-template-columns: auto 1fr auto;
+    row-gap: 4px;
+  }
+  .growth-bar .growth-cap {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    flex-wrap: wrap;
+    row-gap: 2px;
+    padding: 0 4px 2px;
   }
   .activity,
   .tooltip {
