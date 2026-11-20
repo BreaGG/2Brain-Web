@@ -34,6 +34,8 @@ export interface BrainCanvasProps {
   onClear: () => void;
   /** Another view is on top: stop drawing until it goes. */
   paused?: boolean;
+  /** Dive into the brain, the way into the neuron view (and back out when it turns off). */
+  dive?: boolean;
 }
 
 export default function BrainCanvas(p: BrainCanvasProps) {
@@ -149,6 +151,19 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   useEffect(() => {
     s.current?.setPaused(!!p.paused);
   }, [p.paused, s, anat]);
+
+  // the neuron view opens from the brain and closes back onto it: tell the stage where the brain is
+  useEffect(() => {
+    const sc = s.current;
+    if (!sc) return;
+    if (p.dive) {
+      const at = sc.brainScreen();
+      const stage = host.current?.closest<HTMLElement>(".stage");
+      stage?.style.setProperty("--iris-x", `${Math.round(at.x)}px`);
+      stage?.style.setProperty("--iris-y", `${Math.round(at.y)}px`);
+    }
+    sc.setDive(!!p.dive);
+  }, [p.dive, s, anat]);
 
   useEffect(() => {
     if (anat) s.current?.setAnatomy(anat, p.model.links, p.model.ghostSlugs);

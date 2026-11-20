@@ -75,6 +75,46 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
     [],
   );
   const resetSettings = useCallback(() => setSettings(DEFAULT_SETTINGS), []);
+
+  /* ── the way into the neurons and back: dive into the brain, open onto the net; and the reverse ── */
+  const [neuronView, setNeuronView] = useState<"off" | "in" | "on" | "out">("off");
+  useEffect(() => {
+    const reduced = typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const ms = reduced ? 250 : 1000;
+    if (settings.neurons) {
+      setNeuronView((v) => (v === "on" ? "on" : "in"));
+      const t = setTimeout(() => setNeuronView("on"), ms);
+      return () => clearTimeout(t);
+    }
+    setNeuronView((v) => (v === "off" ? "off" : "out"));
+    const t = setTimeout(() => setNeuronView("off"), ms);
+    return () => clearTimeout(t);
+  }, [settings.neurons]);
+
+  // the iris: the neuron view opens out of the brain, a beat after the camera has dived in, and closes back onto it
+  const neuronLayer = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = neuronLayer.current;
+    if (!el || (neuronView !== "in" && neuronView !== "out")) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const opening = neuronView === "in";
+    const delay = opening && !reduced ? 200 : 0;
+    const dur = reduced ? 220 : 800;
+    const start = performance.now();
+    let raf = 0;
+    const frame = () => {
+      const u = Math.min(1, Math.max(0, (performance.now() - start - delay) / dur));
+      const e = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+      const k = opening ? e : 1 - e;
+      const st = el.closest<HTMLElement>(".stage")?.style;
+      const at = `${st?.getPropertyValue("--iris-x") || "50%"} ${st?.getPropertyValue("--iris-y") || "40%"}`;
+      el.style.clipPath = `circle(${(k * 150).toFixed(2)}% at ${at})`;
+      el.style.opacity = String(0.4 + 0.6 * k);
+      if (u < 1) raf = requestAnimationFrame(frame);
+    };
+    frame();
+    return () => cancelAnimationFrame(raf);
+  }, [neuronView]);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const replaceSettings = useCallback((next: Settings) => setSettings(next), []);
@@ -521,10 +561,11 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
               openNote(i, { focus: false });
             }}
             onClear={() => setFocusState({ kind: "none" })}
-            paused={settings.neurons}
+            paused={neuronView === "on"}
+            dive={neuronView === "in" || neuronView === "on"}
           />
-          {settings.neurons && (
-            <div className="neuron-layer">
+          {neuronView !== "off" && (
+            <div ref={neuronLayer} className={`neuron-layer${neuronView === "out" ? " leaving" : ""}`}>
               <NeuronCanvas
                 model={model}
                 groupOf={grouping.of}
@@ -533,6 +574,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
                 hidden={hidden}
                 turning={settings.turning}
                 speed={settings.speed}
+                leaving={neuronView === "out"}
                 onHover={(i, x, y) => setHover(i == null ? null : { i, x, y })}
                 onPick={(i) => {
                   if (i == null) return setFocusState({ kind: "none" });

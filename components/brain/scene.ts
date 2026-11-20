@@ -434,6 +434,11 @@ export class BrainScene {
   );
   private cosmosCur = 0;
   private paused = false;
+  /** 0..1: how far the camera has dived into the brain (the way into the neurons and back out). */
+  private diveK = 0;
+  private diveTarget = 0;
+  private diveFrom = 0;
+  private diveStart = 0;
   private timeNow = 0;
   private glows?: THREE.Points;
   private glowGeo?: THREE.BufferGeometry;
@@ -1113,6 +1118,27 @@ export class BrainScene {
     this.paused = on;
   }
 
+  /** Dive into the brain (on) or come back out of it (off): the way into the neuron view. */
+  setDive(on: boolean) {
+    const target = on ? 1 : 0;
+    if (target === this.diveTarget) return;
+    this.diveFrom = this.diveK;
+    this.diveTarget = target;
+    this.diveStart = performance.now();
+  }
+
+  /** Where the brain is on screen, in the host's pixels: the point the neuron view opens from. */
+  brainScreen(): { x: number; y: number } {
+    const c = this.diveCentre().project(this.camera);
+    return { x: ((c.x + 1) / 2) * this.host.clientWidth, y: ((1 - c.y) / 2) * this.host.clientHeight };
+  }
+
+  private diveCentre() {
+    // the brain itself in the anatomy; the middle of whatever is laid out otherwise
+    if (this.formCur > 0.5) return this.controls.target.clone();
+    return new THREE.Vector3(BRAIN_C.x, BRAIN_C.y, BRAIN_C.z).applyMatrix4(this.root.matrixWorld);
+  }
+
   snapshot(ratio: number): HTMLCanvasElement {
     const prev = this.renderer.getPixelRatio();
     this.renderer.setPixelRatio(ratio);
@@ -1704,7 +1730,29 @@ export class BrainScene {
     this.updateShooter(dt);
     this.updateRing(dt);
     this.updateLabels();
-    this.renderer.render(this.scene, this.camera);
+    // the dive: the camera rushes into the brain and the view widens; the controls' own camera is kept and restored
+    // timed by the clock, not by frames, so it keeps step with the neuron view opening over it
+    const du = Math.min(1, (performance.now() - this.diveStart) / 900);
+    this.diveK = this.diveFrom + (this.diveTarget - this.diveFrom) * du;
+    if (this.diveK > 0) {
+      const e = this.diveK * this.diveK * (3 - 2 * this.diveK);
+      const pos = this.camera.position.clone(), quat = this.camera.quaternion.clone(), fov = this.camera.fov;
+      const c = this.diveCentre();
+      const into = c.clone().add(pos.clone().sub(c).setLength(0.12));
+      this.camera.position.lerpVectors(pos, into, Math.pow(e, 1.4));
+      this.camera.lookAt(this.controls.target.clone().lerp(c, Math.min(1, e * 1.6)));
+      this.camera.fov = fov + 26 * e * e;
+      this.camera.updateProjectionMatrix();
+      this.labelHost.style.opacity = String(1 - Math.min(1, e * 2.5));
+      this.renderer.render(this.scene, this.camera);
+      this.camera.position.copy(pos);
+      this.camera.quaternion.copy(quat);
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    } else {
+      if (this.labelHost.style.opacity) this.labelHost.style.opacity = "";
+      this.renderer.render(this.scene, this.camera);
+    }
   };
 
   private updateRing(dt: number) {

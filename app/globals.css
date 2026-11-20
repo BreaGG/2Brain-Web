@@ -192,12 +192,11 @@ button {
   position: absolute;
   inset: 0;
   background: var(--bg);
-  animation: neuronIn 0.7s ease both;
+  /* opened and closed as an iris from the brain (BrainApp drives it) */
+  clip-path: circle(0% at 50% 40%);
 }
-@keyframes neuronIn {
-  from {
-    opacity: 0;
-  }
+.neuron-layer.leaving {
+  pointer-events: none;
 }
 .neuron-host {
   position: absolute;
