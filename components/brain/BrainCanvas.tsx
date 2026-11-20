@@ -32,6 +32,8 @@ export interface BrainCanvasProps {
   onHover: (i: number | null, x: number, y: number) => void;
   onPick: (i: number | null) => void;
   onClear: () => void;
+  /** Another view is on top: stop drawing until it goes. */
+  paused?: boolean;
 }
 
 export default function BrainCanvas(p: BrainCanvasProps) {
@@ -116,11 +118,14 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   // a picture of what is on screen, asked for from anywhere on the page
   const modelRef = useRef(p.model);
   modelRef.current = p.model;
+  const pausedRef = useRef(!!p.paused);
+  pausedRef.current = !!p.paused;
   useEffect(() => {
     const onCapture = (e: Event) => {
       const { done } = (e as CustomEvent<CaptureDetail>).detail;
       const sc = s.current;
       const box = host.current;
+      if (pausedRef.current) return; // the view on top answers
       if (!sc || !box || !labelHost.current) return done({ ok: false });
       const w = Math.max(1, box.clientWidth);
       // about twice the screen, and never wider than 4,096 pixels
@@ -140,6 +145,10 @@ export default function BrainCanvas(p: BrainCanvasProps) {
     window.addEventListener(CAPTURE_EVENT, onCapture);
     return () => window.removeEventListener(CAPTURE_EVENT, onCapture);
   }, [s]);
+
+  useEffect(() => {
+    s.current?.setPaused(!!p.paused);
+  }, [p.paused, s, anat]);
 
   useEffect(() => {
     if (anat) s.current?.setAnatomy(anat, p.model.links, p.model.ghostSlugs);

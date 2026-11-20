@@ -188,6 +188,31 @@ button {
   outline: none;
 }
 
+.neuron-layer {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  animation: neuronIn 0.7s ease both;
+}
+@keyframes neuronIn {
+  from {
+    opacity: 0;
+  }
+}
+.neuron-host {
+  position: absolute;
+  inset: 0;
+}
+.neuron-gl {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  touch-action: none;
+  outline: none;
+}
+
 .brain-labels {
   position: absolute;
   inset: 0;
