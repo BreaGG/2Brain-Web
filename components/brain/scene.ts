@@ -433,6 +433,7 @@ export class BrainScene {
     new THREE.ShaderMaterial({ vertexShader: STAR_VS, fragmentShader: STAR_FS, uniforms: { uPx: { value: 1 }, uTime: { value: 0 }, uAlpha: { value: 0 } } }),
   );
   private cosmosCur = 0;
+  private paused = false;
   private timeNow = 0;
   private glows?: THREE.Points;
   private glowGeo?: THREE.BufferGeometry;
@@ -1107,6 +1108,11 @@ export class BrainScene {
    * One frame at `ratio` device pixels per CSS pixel, copied onto a 2D canvas
    * (the WebGL buffer is not kept between frames, so it is copied straight away).
    */
+  /** Stop drawing while another view covers the stage. */
+  setPaused(on: boolean) {
+    this.paused = on;
+  }
+
   snapshot(ratio: number): HTMLCanvasElement {
     const prev = this.renderer.getPixelRatio();
     this.renderer.setPixelRatio(ratio);
@@ -1585,7 +1591,7 @@ export class BrainScene {
   private loop = () => {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
-    if (document.hidden) return;
+    if (document.hidden || this.paused) return;
     this.timer.update();
     const dt = Math.min(0.05, this.timer.getDelta());
     const t = this.timer.getElapsed();

@@ -46,6 +46,16 @@ export default function StageOverlay({
           >
             <Icon name="galaxy" size={14} />
           </button>
+          <button
+            type="button"
+            className="icon-button boxed"
+            aria-pressed={settings.neurons}
+            title={settings.neurons ? "Back to the brain (N)" : "Neurons: every note a neuron, every link an axon (N)"}
+            aria-label="Neurons"
+            onClick={() => set("neurons", !settings.neurons)}
+          >
+            <Icon name="neuron" size={14} />
+          </button>
           <CaptureButton />
           <button
             type="button"

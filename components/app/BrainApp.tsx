@@ -24,6 +24,7 @@ const BrainCanvas = dynamic(() => import("@/components/brain/BrainCanvas"), {
   ssr: false,
   loading: () => <div className="brain-loading label">Drawing your brain…</div>,
 });
+const NeuronCanvas = dynamic(() => import("@/components/brain/NeuronCanvas"), { ssr: false });
 const HandTracking = dynamic(() => import("@/components/lab/HandTracking"), { ssr: false });
 
 interface Props {
@@ -264,6 +265,8 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
         setSettings((st) => ({ ...st, focusBrain: !st.focusBrain }));
       } else if (e.key === "c" && !e.metaKey && !e.ctrlKey) {
         set("cosmos", !settingsRef.current.cosmos);
+      } else if (e.key === "n" && !e.metaKey && !e.ctrlKey) {
+        set("neurons", !settingsRef.current.neurons);
       } else if (e.key === "p" && !e.metaKey && !e.ctrlKey) {
         document.querySelector<HTMLButtonElement>("[data-capture]")?.click();
       } else if (e.key === "g" && !e.metaKey && !e.ctrlKey) {
@@ -518,7 +521,26 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
               openNote(i, { focus: false });
             }}
             onClear={() => setFocusState({ kind: "none" })}
+            paused={settings.neurons}
           />
+          {settings.neurons && (
+            <div className="neuron-layer">
+              <NeuronCanvas
+                model={model}
+                groupOf={grouping.of}
+                groupRgb={sceneRgb}
+                noteLit={noteLit}
+                hidden={hidden}
+                turning={settings.turning}
+                speed={settings.speed}
+                onHover={(i, x, y) => setHover(i == null ? null : { i, x, y })}
+                onPick={(i) => {
+                  if (i == null) return setFocusState({ kind: "none" });
+                  openNote(i, { focus: false });
+                }}
+              />
+            </div>
+          )}
           <StageOverlay vizOpen={vizOpen} setVizOpen={setVizOpen} hover={hover} />
           <Offline />
         </main>

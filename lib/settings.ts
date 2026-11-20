@@ -24,6 +24,8 @@ export interface Settings {
   focusBrain: boolean;
   /** Visual only: the brain becomes a cosmos, every section a galaxy. */
   cosmos: boolean;
+  /** Visual only: closer in, every note a neuron and every link an axon carrying impulses. */
+  neurons: boolean;
   order: RecordOrder;
   limitRotation: boolean;
   /** Faint threads joining the passages of each note. */
@@ -63,6 +65,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tbCounts: false,
   focusBrain: false,
   cosmos: false,
+  neurons: false,
   order: "oldest",
   limitRotation: false,
   scaffold: false,

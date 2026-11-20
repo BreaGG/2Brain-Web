@@ -22,6 +22,7 @@ type IconName =
   | "menu"
   | "copy"
   | "galaxy"
+  | "neuron"
   | "play"
   | "pause"
   | "camera";
@@ -133,6 +134,13 @@ export function Icon({ name, size = 14, style }: { name: IconName; size?: number
       return (
         <svg {...p}>
           <path d="M2 4.5h12M2 8h12M2 11.5h12" />
+        </svg>
+      );
+    case "neuron":
+      return (
+        <svg {...p}>
+          <circle cx="7" cy="8" r="2" fill="currentColor" stroke="none" />
+          <path d="M5.4 6.8 3 4.6M3 4.6 1.6 4.9M3 4.6l-.2-1.5M5.3 9.3 3.2 11.6M3.2 11.6l-1.5-.1M8.7 6.9l1.6-2.6M8.9 8.4c2 .1 3.3.9 4.3 2.4M13.2 10.8l1.3-.4M13.2 10.8l.4 1.4" />
         </svg>
       );
     case "galaxy":
