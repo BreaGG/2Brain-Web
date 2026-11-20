@@ -14,6 +14,8 @@ interface Props {
   hidden: Uint8Array;
   turning: boolean;
   speed: number;
+  /** The view is closing: pull away from the net. */
+  leaving?: boolean;
   onHover: (i: number | null, x: number, y: number) => void;
   onPick: (i: number | null) => void;
 }
@@ -59,6 +61,9 @@ export default function NeuronCanvas(p: Props) {
   useEffect(() => sc.current?.setLit(p.noteLit), [p.noteLit, net]);
   useEffect(() => sc.current?.setHidden(p.hidden), [p.hidden, net]);
   useEffect(() => sc.current?.setView({ turning: p.turning, speed: p.speed }), [p.turning, p.speed]);
+  useEffect(() => {
+    if (p.leaving) sc.current?.leave();
+  }, [p.leaving]);
 
   // a picture of the neurons, when one is asked for while they are showing
   const count = p.model.notes.length;

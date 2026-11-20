@@ -81,6 +81,10 @@ export class NeuronScene {
   private view = { turning: true, speed: 100 };
   private proj = 600;
   private intro = 0;
+  /** Leaving: 0..1 as the camera pulls away from the net, or -1 while staying. */
+  private outro = -1;
+  private outroFrom: THREE.Vector3 | null = null;
+  private outroStart = 0;
   private screen = new Float32Array(0);
   private hoverI: number | null = null;
   private down: { x: number; y: number } | null = null;
@@ -475,6 +479,15 @@ export class NeuronScene {
     this.view = v;
   }
 
+  /** Pull the camera away from the net: the way out of the neuron view. */
+  leave() {
+    if (this.outro >= 0) return;
+    this.outro = 0;
+    this.outroStart = performance.now();
+    this.outroFrom = this.camera.position.clone().sub(this.controls.target);
+    this.controls.enabled = false;
+  }
+
   /** Send an impulse down every axon that leaves neuron i. */
   fire(i: number, force = false) {
     const net = this.net;
@@ -564,15 +577,21 @@ export class NeuronScene {
     const t = this.timer.getElapsed();
     const net = this.net;
     if (net) {
-      if (this.intro < 1) {
-        this.intro = Math.min(1, this.intro + dt / 2.6);
+      if (this.outro >= 0) {
+        // leaving: away from the net, faster and faster, the way it came in
+        this.outro = Math.min(1, (performance.now() - this.outroStart) / 800);
+        const e = this.outro * this.outro;
+        this.camera.position.copy(this.controls.target).add(this.outroFrom!.clone().multiplyScalar(1 + 4.5 * e));
+        this.camera.lookAt(this.controls.target);
+      } else if (this.intro < 1) {
+        this.intro = Math.min(1, this.intro + dt / 1.9);
         this.placeCamera(this.intro);
       }
       this.step(dt);
     }
-    this.controls.autoRotate = this.view.turning && !this.reduced && this.intro >= 1;
+    this.controls.autoRotate = this.view.turning && !this.reduced && this.intro >= 1 && this.outro < 0;
     this.controls.autoRotateSpeed = 0.45 * (this.view.speed / 100);
-    if (this.intro >= 1) this.controls.update();
+    if (this.intro >= 1 && this.outro < 0) this.controls.update();
     const dist = this.camera.position.distanceTo(this.controls.target);
     for (const m of [this.somaMat, this.dendMat, this.axonMat, this.headMat, this.synMat, this.dustMat, this.dotMat]) {
       m.uniforms.uTime.value = t;
