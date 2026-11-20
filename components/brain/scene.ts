@@ -1659,7 +1659,7 @@ export class BrainScene {
     const quiet = k.startsWith("tree") || k.startsWith("answer:flow") || k.startsWith("cosmos") ? 0.95 * (1 - this.hasLitCur) : 0.6;
     // in the cosmos a lit galaxy's links are kept softer, so its stars still show through
     const chartK = this.layout?.flat || k.startsWith("cosmos") ? (1 - quiet * this.formCur) * (k.startsWith("cosmos") ? 1 - 0.45 * this.hasLitCur * this.formCur : 1) : 1;
-    this.linesMat.uniforms.uOpacity.value = (0.06 + 0.12 * this.formCur) * (1 + this.hasLitCur * 1.8) * chartK;
+    this.linesMat.uniforms.uOpacity.value = (0.04 + 0.14 * this.formCur) * (1 + this.hasLitCur * 2.4) * chartK;
     this.scaffoldMat.uniforms.uOpacity.value = 0.42 * Math.max(0, this.formCur - 0.4) / 0.6 * Math.min(1, this.morphCur * 1.5);
     if (this.scaffold) this.scaffold.visible = this.formCur > 0.4;
 

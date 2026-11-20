@@ -30,6 +30,8 @@ export const FRAME = { top: 0.95, bottom: -5.6, width: 5.4 };
 export const FRAME_CY = (FRAME.top + FRAME.bottom) / 2;
 export const BRAIN_C = { x: 0, y: -0.12, z: 0 };
 const SPLIT = 0.22;
+/** Half the width of the gap between the hemispheres of the cerebrum. */
+const FISSURE = 0.026;
 
 export interface Atlas {
   brainN: number;
@@ -386,7 +388,9 @@ export function buildAnatomy(model: Model, atlas: Atlas, opts: { small: boolean;
         y += (ay * Math.cos(ang) + by * Math.sin(ang)) * rad;
         z += (az * Math.cos(ang) + bz * Math.sin(ang)) * rad;
       }
-      recPos[k * 3] = x;
+      // the hemispheres of the cerebrum part a little at the midline, as they do: the fissure is a gap
+      const reg = atlas.brainRegion[p];
+      recPos[k * 3] = reg <= 5 ? x + Math.sign(BP[p * 3] || 1) * FISSURE : x;
       recPos[k * 3 + 1] = y;
       recPos[k * 3 + 2] = z;
       recNormal[k * 3] = nx;
@@ -534,7 +538,11 @@ export function brainSurface(atlas: Atlas): Surface {
     // cortex: meandering sulci between the gyri
     const f = 3.6;
     const nz = noise(x * f, y * f, z * f) + 0.3 * noise(x * f * 2.3 + 7, y * f * 2.3 + 7, z * f * 2.3 + 7);
-    return 0.9 * (1 - Math.min(1, Math.abs(nz) / 0.1));
+    const fold = 0.9 * (1 - Math.min(1, Math.abs(nz) / 0.1));
+    // the longitudinal fissure: the inner faces of the two hemispheres, where they meet, lie deep in shadow
+    const ax = Math.abs(x);
+    const fissure = ax < 0.025 ? 1 : ax > 0.095 ? 0 : 1 - (ax - 0.025) / 0.07;
+    return Math.max(fold, fissure * fissure);
   };
   const r2 = cell * cell, rb2 = 0.04 * 0.04;
   for (let i = 0; i < N; i++) {
