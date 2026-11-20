@@ -56,7 +56,10 @@ const POINT_VS = /* glsl */ `
   attribute float aLit;
   attribute float aVis;
   attribute float aSplitX;
-  attribute float aMatter;
+  // brain points: the surface normal, its length 1 + how near a lobe border it is (zero for the body);
+  // packed so the shader stays within the attributes every GPU allows
+  attribute vec3 aNormal;
+  uniform float uShade;
 #ifdef SPIN
   attribute vec3 aGalC;
   attribute vec3 aGalA;
@@ -100,10 +103,27 @@ const POINT_VS = /* glsl */ `
     gl_Position = projectionMatrix * mv;
     float rev = smoothstep(aOrder - 0.03, aOrder, uReveal);
     float lit = mix(1.0, mix(uDim, 1.0, aLit), uHasLit);
+    // brain matter is the only part with a hemisphere to split from: that is how it is told apart
+    float aMatter = step(0.001, abs(aSplitX));
     float layer = mix(uBodyK, uMatterK, aMatter);
     vAlpha = rev * lit * aVis * layer;
     float sz = aSize * uScale * (1.0 + 0.8 * aLit * uHasLit);
     vColor = aColor;
+    // the brain as an organ: lit from above-left, its far side in shadow, a rim of light round its edge
+    // and its lobes parted by the big sulci. Brain points only, and only while it is the anatomy.
+    float nLen = length(aNormal);
+    float hasN = step(0.5, nLen) * uShade;
+    if (hasN > 0.0) {
+      float aSulcus = clamp(nLen - 1.0, 0.0, 1.0);
+      vec3 nV = normalize(normalMatrix * (aNormal / nLen));
+      float key = max(dot(nV, normalize(vec3(-0.45, 0.62, 0.64))), 0.0);
+      float rim = pow(1.0 - abs(nV.z), 3.0);
+      float front = smoothstep(-0.4, 0.3, nV.z);
+      float shade = ((0.36 + 0.9 * key) * mix(0.2, 1.0, front) + rim * 0.55 * front) * (1.0 - 0.88 * aSulcus);
+      vAlpha *= mix(1.0, shade, hasN);
+      vColor = mix(vColor, mix(vColor, vec3(1.0), 0.4), rim * front * hasN);
+      sz *= mix(1.0, 0.85 + 0.3 * front, hasN);
+    }
 #ifdef SPIN
     // stars: blue-white to gold, brighter towards a galaxy's core, some twinkling
     float h = fract(sin(aOrder * 917.3 + aSize * 13.1) * 43758.5453);
@@ -177,6 +197,7 @@ const TRACT_VS = /* glsl */ `
   uniform float uPx;
   uniform float uAlpha;
   uniform float uSpread;
+  uniform float uK;
   varying vec3 vColor;
   varying float vAlpha;
   void main() {
@@ -190,8 +211,8 @@ const TRACT_VS = /* glsl */ `
     vec4 mv = modelViewMatrix * vec4(p, 1.0);
     gl_Position = projectionMatrix * mv;
     gl_PointSize = max(1.0, (1.7 + 1.1 * fract(aSeed * 5.3)) * uPx * 18.0 / -mv.z);
-    vColor = mix(mix(aColA, aColB, t), vec3(1.0), 0.28) * 1.35;
-    vAlpha = aW * uAlpha * pow(max(bell, 0.0), 0.45);
+    vColor = mix(mix(aColA, aColB, t), vec3(1.0), 0.14) * 1.1;
+    vAlpha = aW * uAlpha * pow(max(bell, 0.0), 0.45) * 0.75 * uK;
   }
 `;
 
@@ -300,6 +321,7 @@ function pointsMaterial(spin = false) {
         uTime: { value: 0 },
         uSplit: { value: 0 },
         uMatterK: { value: 1 },
+        uShade: { value: 0 },
         uBodyK: { value: 1 },
         uSpin: { value: 0 },
         uCosmos: { value: 0 },
@@ -308,6 +330,9 @@ function pointsMaterial(spin = false) {
     }),
   );
 }
+
+/** The colour of the body's cord and nerves: bone, a little cool. */
+const BONE = [0.84, 0.89, 1.0];
 
 const ease = (cur: number, target: number, dt: number, rate = 4) => {
   const d = target - cur;
@@ -395,7 +420,7 @@ export class BrainScene {
     new THREE.ShaderMaterial({
       vertexShader: TRACT_VS,
       fragmentShader: POINT_FS,
-      uniforms: { uTime: { value: 0 }, uPx: { value: 1 }, uAlpha: { value: 0 }, uSpread: { value: 0.05 } },
+      uniforms: { uTime: { value: 0 }, uPx: { value: 1 }, uAlpha: { value: 0 }, uSpread: { value: 0.05 }, uK: { value: 1 } },
     }),
   );
   private tractLinks: { a: number; b: number; w: number }[] = [];
@@ -577,14 +602,23 @@ export class BrainScene {
     this.morphCur = 1;
     rg.setAttribute("aColor", new THREE.BufferAttribute(new Float32Array(P * 3), 3));
     const rs = new Float32Array(P);
+    // the cortex is denser than the body: its points are smaller, so it reads as a surface
+    let matterN = 0;
+    for (let k = 0; k < P; k++) if (anat.recKind[k] === KIND_MATTER) matterN++;
+    const matterSize = matterN > 30000 ? 1.12 : 1.45;
     for (let k = 0; k < P; k++) {
       const kind = anat.recKind[k];
-      rs[k] = kind === KIND_SPINE ? 1.7 : kind === KIND_NERVE ? 1.55 : kind === KIND_STEM ? 1.3 : kind === KIND_MATTER ? 1.45 : kind === KIND_FACE ? 1.2 : 1.5;
+      rs[k] = kind === KIND_SPINE ? 1.7 : kind === KIND_NERVE ? 1.55 : kind === KIND_STEM ? 1.3 : kind === KIND_MATTER ? matterSize : kind === KIND_FACE ? 1.2 : 1.5;
     }
-    const matterFlag = new Float32Array(P);
-    for (let k = 0; k < P; k++) matterFlag[k] = anat.recKind[k] === KIND_MATTER ? 1 : 0;
     rg.setAttribute("aSplitX", new THREE.BufferAttribute(anat.recSplit, 1));
-    rg.setAttribute("aMatter", new THREE.BufferAttribute(matterFlag, 1));
+    const packed = new Float32Array(anat.recNormal);
+    for (let k = 0; k < P; k++) {
+      const s = 1 + anat.recSulcus[k];
+      packed[k * 3] *= s;
+      packed[k * 3 + 1] *= s;
+      packed[k * 3 + 2] *= s;
+    }
+    rg.setAttribute("aNormal", new THREE.BufferAttribute(packed, 3));
     rg.setAttribute("aSize", new THREE.BufferAttribute(rs, 1));
     this.recSizeBase = rs.slice();
     rg.setAttribute("aOrder", new THREE.BufferAttribute(anat.recOrder, 1));
@@ -1165,27 +1199,31 @@ export class BrainScene {
     for (let k = 0; k < anat.recCount; k++) {
       const c = groupRgb[this.groupOf[anat.recNote[k]]] ?? [1, 1, 1];
       const kind = anat.recKind[k];
+      // the body (cord, nerves, face) reads as bone and nerve, a cool silver with a trace of its note's colour;
+      // the brain keeps the full colour of its folders, so the two are never confused
       let white = 0.3;
       let gain = 0.6;
+      let bone = 0;
       if (kind === KIND_SPINE) {
-        white = 0.75;
-        gain = 1.0;
+        bone = 0.88;
+        gain = 0.95;
       } else if (kind === KIND_STEM) {
-        white = 0.45;
-        gain = 0.42;
+        white = 0.35;
+        gain = 0.5;
       } else if (kind === KIND_NERVE) {
-        white = 0.45;
-        gain = 0.82;
+        bone = 0.8;
+        gain = 0.66;
       } else if (kind === KIND_FACE) {
-        white = 0.4;
-        gain = 0.45;
+        bone = 0.82;
+        gain = 0.48;
       } else if (kind === KIND_MATTER) {
-        white = 0.18;
-        gain = 0.62;
+        white = 0.08;
+        gain = 0.95;
       }
-      arr[k * 3] = (c[0] + (1 - c[0]) * white) * gain;
-      arr[k * 3 + 1] = (c[1] + (1 - c[1]) * white) * gain;
-      arr[k * 3 + 2] = (c[2] + (1 - c[2]) * white) * gain;
+      for (let e = 0; e < 3; e++) {
+        const tinted = c[e] + (1 - c[e]) * white;
+        arr[k * 3 + e] = (tinted + (BONE[e] - tinted) * bone) * gain;
+      }
     }
     rc.needsUpdate = true;
     this.recRgb = arr;
@@ -1584,6 +1622,8 @@ export class BrainScene {
     const wantTracts = this.view.tracts && this.view.notes && this.tractLinks.length > 0;
     const ta = this.tractMat.uniforms.uAlpha;
     ta.value = wantTracts ? Math.min(1, ta.value + dt * 2.5) : Math.max(0, ta.value - dt * 4);
+    // in the anatomy the streams stay a soft hint, so the brain's own form reads through them
+    this.tractMat.uniforms.uK.value = 0.35 + 0.65 * this.formCur;
     this.tractMat.uniforms.uTime.value = t;
     this.tractMat.uniforms.uSpread.value = 0.045 * (1 - this.formCur) + 0.03 * this.formCur;
     if (this.tractPts) this.tractPts.visible = ta.value > 0.001;
@@ -1591,6 +1631,7 @@ export class BrainScene {
     this.hasLitCur = ease(this.hasLitCur, this.hasLitTarget, dt, 6);
 
     this.recMat.uniforms.uForm.value = this.formCur;
+    this.recMat.uniforms.uShade.value = Math.max(0, 1 - this.formCur * 1.6);
     for (const m of [this.notesMat, this.recMat, this.ghostMat]) {
       m.uniforms.uReveal.value = this.revealCur;
       m.uniforms.uHasLit.value = this.hasLitCur;
@@ -1612,7 +1653,7 @@ export class BrainScene {
     const quiet = k.startsWith("tree") || k.startsWith("answer:flow") || k.startsWith("cosmos") ? 0.95 * (1 - this.hasLitCur) : 0.6;
     // in the cosmos a lit galaxy's links are kept softer, so its stars still show through
     const chartK = this.layout?.flat || k.startsWith("cosmos") ? (1 - quiet * this.formCur) * (k.startsWith("cosmos") ? 1 - 0.45 * this.hasLitCur * this.formCur : 1) : 1;
-    this.linesMat.uniforms.uOpacity.value = (0.1 + 0.08 * this.formCur) * (1 + this.hasLitCur * 1.4) * chartK;
+    this.linesMat.uniforms.uOpacity.value = (0.06 + 0.12 * this.formCur) * (1 + this.hasLitCur * 1.8) * chartK;
     this.scaffoldMat.uniforms.uOpacity.value = 0.42 * Math.max(0, this.formCur - 0.4) / 0.6 * Math.min(1, this.morphCur * 1.5);
     if (this.scaffold) this.scaffold.visible = this.formCur > 0.4;
 
