@@ -13,6 +13,8 @@ export interface SceneCallbacks {
   onHover: (note: number | null, x: number, y: number) => void;
   onPick: (note: number | null) => void;
   onClear: () => void;
+  /** The reader zoomed on past the end of the anatomy's range: in (towards the brain, the neurons) or back out. */
+  onZoomThrough?: (dir: "in" | "out") => void;
 }
 
 export interface SceneView {
@@ -1863,10 +1865,40 @@ export class BrainScene {
   private lastGesture = 0;
   private gestureScale = 1;
 
+  /* Zooming on past the anatomy's range goes a level deeper (body → brain → neurons) or back up.
+   * The camera stops at the threshold and the push builds up, so a single notch never jumps a level. */
+  private zoomPush = 0;
+  private zoomPushAt = 0;
+  private zoomLock = 0;
+  private zoomThrough(k: number, want: number): number | null {
+    if (this.formCur > 0.5 || this.layout?.spin) return null;
+    const brain = this.view.focusBrain;
+    const home = this.homeDist();
+    const inAt = brain ? this.controls.minDistance * 1.05 : home * 0.42;
+    const outAt = brain ? home * 2.1 : Infinity;
+    const dir = k < 1 && want < inAt ? "in" : k > 1 && want > outAt ? "out" : null;
+    const now = performance.now();
+    // the push fades over a couple of seconds, so a slow device still adds it up but a stray notch never jumps
+    if (!dir || Math.sign(this.zoomPush) !== (dir === "in" ? 1 : -1)) this.zoomPush = 0;
+    else this.zoomPush *= Math.exp(-(now - this.zoomPushAt) / 2000);
+    if (!dir) return null;
+    this.zoomPushAt = now;
+    if (now > this.zoomLock) {
+      this.zoomPush += (dir === "in" ? 1 : -1) * Math.abs(Math.log(k));
+      if (Math.abs(this.zoomPush) > 0.5) {
+        this.zoomPush = 0;
+        this.zoomLock = now + 1400;
+        this.cb.onZoomThrough?.(dir);
+      }
+    }
+    return dir === "in" ? inAt : outAt;
+  }
+
   /** Move the camera closer (k < 1) or further (k > 1) from what it looks at. */
   private dolly(k: number) {
     const off = this.camera.position.clone().sub(this.controls.target);
-    const len = Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, off.length() * k));
+    const stop = this.zoomThrough(k, off.length() * k);
+    const len = stop ?? Math.min(this.controls.maxDistance, Math.max(this.controls.minDistance, off.length() * k));
     off.setLength(len);
     this.camera.position.copy(this.controls.target).add(off);
   }

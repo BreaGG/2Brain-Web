@@ -18,6 +18,7 @@ interface Props {
   leaving?: boolean;
   onHover: (i: number | null, x: number, y: number) => void;
   onPick: (i: number | null) => void;
+  onZoomOut?: () => void;
 }
 
 /** The neuron view: every note a neuron, every link an axon, impulses running between them. */
@@ -25,9 +26,9 @@ export default function NeuronCanvas(p: Props) {
   const host = useRef<HTMLDivElement>(null);
   const labelHost = useRef<HTMLDivElement>(null);
   const sc = useRef<NeuronScene | null>(null);
-  const cbs = useRef({ onHover: p.onHover, onPick: p.onPick });
+  const cbs = useRef({ onHover: p.onHover, onPick: p.onPick, onZoomOut: p.onZoomOut });
   useEffect(() => {
-    cbs.current = { onHover: p.onHover, onPick: p.onPick };
+    cbs.current = { onHover: p.onHover, onPick: p.onPick, onZoomOut: p.onZoomOut };
   });
 
   const small = typeof window !== "undefined" && (window.innerWidth < 700 || ((navigator as Navigator & { deviceMemory?: number }).deviceMemory ?? 8) <= 4);
@@ -40,7 +41,7 @@ export default function NeuronCanvas(p: Props) {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     let scene: NeuronScene;
     try {
-      scene = new NeuronScene(host.current, labelHost.current, { onHover: (i, x, y) => cbs.current.onHover(i, x, y), onPick: (i) => cbs.current.onPick(i) }, reduced);
+      scene = new NeuronScene(host.current, labelHost.current, { onHover: (i, x, y) => cbs.current.onHover(i, x, y), onPick: (i) => cbs.current.onPick(i), onZoomOut: () => cbs.current.onZoomOut?.() }, reduced);
     } catch (err) {
       console.error("[2brain] the neuron view could not start", err);
       return;

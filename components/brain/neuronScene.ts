@@ -11,6 +11,8 @@ import type { NeuronNet } from "./neurons";
 export interface NeuronCallbacks {
   onHover: (i: number | null, x: number, y: number) => void;
   onPick: (i: number | null) => void;
+  /** Zoomed out past the whole net: back to the brain. */
+  onZoomOut?: () => void;
 }
 
 const TEX_W = 256;
@@ -81,6 +83,7 @@ export class NeuronScene {
   private view = { turning: true, speed: 100 };
   private proj = 600;
   private intro = 0;
+  private introStart = 0;
   /** Leaving: 0..1 as the camera pulls away from the net, or -1 while staying. */
   private outro = -1;
   private outroFrom: THREE.Vector3 | null = null;
@@ -309,6 +312,7 @@ export class NeuronScene {
     this.headGeo.setDrawRange(0, 0);
 
     const el = this.renderer.domElement;
+    el.addEventListener("wheel", this.onWheel, { passive: true });
     el.addEventListener("pointermove", this.onMove);
     el.addEventListener("pointerdown", this.onDown);
     el.addEventListener("pointerup", this.onUp);
@@ -435,8 +439,10 @@ export class NeuronScene {
     // frame it, and fly in from far out
     this.controls.target.set(...net.centre);
     this.controls.minDistance = 1.5;
-    this.controls.maxDistance = net.extent * 5;
+    // a little beyond the overview: zooming out past it goes back up to the brain
+    this.controls.maxDistance = net.extent * (this.camera.aspect < 1 ? 2.9 : 2.1);
     this.intro = 0;
+    this.introStart = performance.now();
     this.placeCamera(0);
     // a few cells fire at once, so the net is alive from the first frame
     for (let k = 0; k < Math.min(6, N); k++) this.fire(Math.floor(this.rnd() * N));
@@ -524,6 +530,7 @@ export class NeuronScene {
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     const el = this.renderer.domElement;
+    el.removeEventListener("wheel", this.onWheel);
     el.removeEventListener("pointermove", this.onMove);
     el.removeEventListener("pointerdown", this.onDown);
     el.removeEventListener("pointerup", this.onUp);
@@ -584,7 +591,7 @@ export class NeuronScene {
         this.camera.position.copy(this.controls.target).add(this.outroFrom!.clone().multiplyScalar(1 + 4.5 * e));
         this.camera.lookAt(this.controls.target);
       } else if (this.intro < 1) {
-        this.intro = Math.min(1, this.intro + dt / 1.9);
+        this.intro = Math.min(1, (performance.now() - this.introStart) / 1900);
         this.placeCamera(this.intro);
       }
       this.step(dt);
@@ -731,6 +738,25 @@ export class NeuronScene {
     }
     this.cbs.onHover(i, e.clientX, e.clientY);
   };
+  // pushing on past the farthest zoom, a few notches, goes back up to the brain
+  private outPush = 0;
+  private outPushAt = 0;
+  private onWheel = (e: WheelEvent) => {
+    if (!this.net || this.intro < 1 || this.outro >= 0 || e.deltaY <= 0) return;
+    const atMax = this.camera.position.distanceTo(this.controls.target) >= this.controls.maxDistance * 0.97;
+    const now = performance.now();
+    // the push fades over a couple of seconds, so a slow device still adds it up but a stray notch never jumps
+    this.outPush = atMax ? this.outPush * Math.exp(-(now - this.outPushAt) / 2000) : 0;
+    this.outPushAt = now;
+    if (!atMax) return;
+    const px = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    this.outPush += Math.abs(e.deltaY * px) * (e.ctrlKey ? 0.012 : 0.0015);
+    if (this.outPush > 0.5) {
+      this.outPush = 0;
+      this.cbs.onZoomOut?.();
+    }
+  };
+
   private onDown = (e: PointerEvent) => {
     this.down = { x: e.clientX, y: e.clientY };
   };

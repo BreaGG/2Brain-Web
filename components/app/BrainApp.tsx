@@ -561,6 +561,14 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
               openNote(i, { focus: false });
             }}
             onClear={() => setFocusState({ kind: "none" })}
+            onZoomThrough={(dir) => {
+              // zoom through the levels: body → brain → neurons, and back out
+              const st = settingsRef.current;
+              if (dir === "in") {
+                if (!st.focusBrain) set("focusBrain", true);
+                else if (!st.neurons) set("neurons", true);
+              } else if (st.focusBrain && !st.neurons) set("focusBrain", false);
+            }}
             paused={neuronView === "on"}
             dive={neuronView === "in" || neuronView === "on"}
           />
@@ -575,6 +583,7 @@ export default function BrainApp({ pages, initialSlug, repo, usingSample, writab
                 turning={settings.turning}
                 speed={settings.speed}
                 leaving={neuronView === "out"}
+                onZoomOut={() => set("neurons", false)}
                 onHover={(i, x, y) => setHover(i == null ? null : { i, x, y })}
                 onPick={(i) => {
                   if (i == null) return setFocusState({ kind: "none" });

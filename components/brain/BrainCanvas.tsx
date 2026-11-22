@@ -32,6 +32,7 @@ export interface BrainCanvasProps {
   onHover: (i: number | null, x: number, y: number) => void;
   onPick: (i: number | null) => void;
   onClear: () => void;
+  onZoomThrough?: (dir: "in" | "out") => void;
   /** Another view is on top: stop drawing until it goes. */
   paused?: boolean;
   /** Dive into the brain, the way into the neuron view (and back out when it turns off). */
@@ -42,9 +43,9 @@ export default function BrainCanvas(p: BrainCanvasProps) {
   const host = useRef<HTMLDivElement>(null);
   const labelHost = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<BrainScene | null>(null);
-  const cbs = useRef({ onHover: p.onHover, onPick: p.onPick, onClear: p.onClear });
+  const cbs = useRef({ onHover: p.onHover, onPick: p.onPick, onClear: p.onClear, onZoomThrough: p.onZoomThrough });
   useEffect(() => {
-    cbs.current = { onHover: p.onHover, onPick: p.onPick, onClear: p.onClear };
+    cbs.current = { onHover: p.onHover, onPick: p.onPick, onClear: p.onClear, onZoomThrough: p.onZoomThrough };
   });
 
   const small = useMemo(() => {
@@ -102,6 +103,7 @@ export default function BrainCanvas(p: BrainCanvasProps) {
         onHover: (i, x, y) => cbs.current.onHover(i, x, y),
         onPick: (i) => cbs.current.onPick(i),
         onClear: () => cbs.current.onClear(),
+        onZoomThrough: (d) => cbs.current.onZoomThrough?.(d),
       });
     } catch (e) {
       console.error("[2brain] WebGL unavailable", e);
