@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { useApp, ADD_ACCENT } from "@/components/app/context";
 import { Icon, Select } from "@/components/ui";
 import SignIn from "@/components/app/SignIn";
@@ -209,7 +211,11 @@ export default function ImportSource({ hideSignIn = false }: { hideSignIn?: bool
                   <span className="label">{s.isNew ? "New" : "Updated"}</span> {s.text}
                 </>
               ) : (
-                <span className="note">{s.text}</span>
+                <span className="note">
+                  <ReactMarkdown skipHtml allowedElements={["strong", "em", "code", "p"]} unwrapDisallowed components={{ p: ({ children }) => <>{children}</> }}>
+                    {s.text}
+                  </ReactMarkdown>
+                </span>
               )}
             </li>
           ))}
@@ -219,7 +225,13 @@ export default function ImportSource({ hideSignIn = false }: { hideSignIn?: bool
 
       {(phase === "review" || phase === "saving") && (
         <div className="import-review">
-          {summary && <p className="lede" style={{ fontSize: 14 }}>{summary}</p>}
+          {summary && (
+            <div className="prose import-summary">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} skipHtml>
+                {summary}
+              </ReactMarkdown>
+            </div>
+          )}
           {warnings.map((w) => (
             <small key={w} className="write-warn">
               {w}
