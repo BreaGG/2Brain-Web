@@ -55,6 +55,13 @@ export async function createPasskey(code?: string) {
   }
 }
 
+/** Sign out on this device: end the session, forget the copy of the brain kept for offline use, and go to the door. */
 export async function signOut() {
   await fetch("/api/auth/logout", { method: "POST" });
+  try {
+    for (const k of await caches.keys()) if (k.startsWith("2brain-pages")) await caches.delete(k);
+  } catch {
+    /* no Cache Storage here */
+  }
+  window.location.replace("/login");
 }

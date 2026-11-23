@@ -50,22 +50,28 @@ WIKI_WEBHOOK_SECRET=…   # any long secret, the same one you give the webhook
 
 **Add → Write a new note** saves a note straight to the wiki repository: the Markdown file and the line that lists it in its folder's `index.md` go in as **one commit** (a new folder also gets an index, linked from `wiki/index.md`). The note appears in the brain at once and opens.
 
-Writing, editing, asking and importing are for you alone: you **sign in with a passkey** (your device's Face ID, Touch ID, fingerprint, PIN or a security key), and the device stays signed in for 30 days. There is no key to type.
+**Your brain is private.** When the wiki is on GitHub, the whole app sits behind a sign-in page: the brain, every note, the API and every action. You sign in one of two ways:
+
+- **With a passkey** made on the device (Face ID, Touch ID, fingerprint, PIN or a security key), the same one used to write, ask and import.
+- **With the user name and key** from the site's environment variables, on a device that has no passkey yet. Right after, the page offers to make a passkey on that device, so next time there is nothing to type.
+
+A sign-in lasts **15 days** on the device and is never extended: after 15 days it asks again. **Sign out** (bottom of the rail) ends it at once and deletes the copy of the brain kept on the device for offline use. Wrong user names or keys are slowed down, and after six tries in 15 minutes they are refused for a while. The sample wiki (no GitHub settings) stays open.
 
 `GITHUB_TOKEN` needs **write access to the repository's contents** (a fine-grained token with *Contents: Read and write* on that one repository); it stays on the server.
 
-#### Setting up your passkey (once)
+#### Setting up sign-in (once)
 
-1. Add a short setup code of your choosing to the site's environment variables and redeploy:
+1. Add a user name and a key of your choosing to the site's environment variables and redeploy:
 
    ```bash
-   PASSKEY_SETUP_CODE=…   # used once, to create the first passkey (an old WIKI_WRITE_KEY also works)
+   ACCESS_USER=…          # the user name for signing in without a passkey
+   PASSKEY_SETUP_CODE=…   # the key that goes with it (an old WIKI_WRITE_KEY also works)
    ```
 
-2. Open 2brain, go to **Add**, type the setup code and press **Create passkey**; confirm with Face ID, Touch ID or your fingerprint. The passkey's *public* key is saved to the wiki repository at `.2brain/passkeys.json` (nothing secret is stored there) and you are signed in.
-3. Once a passkey exists the setup code is no longer accepted, so you can delete `PASSKEY_SETUP_CODE` (and `WIKI_WRITE_KEY`) from the environment.
+2. Open 2brain: you land on the sign-in page. Sign in with the user name and key, then press **Create a passkey here** and confirm with Face ID, Touch ID or your fingerprint. The passkey's *public* key is saved to the wiki repository at `.2brain/passkeys.json`; nothing secret is stored there.
+3. From then on the passkey opens the brain on that device. Keep `ACCESS_USER` and `PASSKEY_SETUP_CODE` set if you want the user name and key to keep working on devices without a passkey, or delete them to allow passkeys only.
 
-Passkeys sync across your devices through iCloud Keychain, Google Password Manager or your password manager; on another computer the browser can also use your phone's passkey by scanning a QR code. For a device whose passkeys do not sync, sign in elsewhere and use **Add device** at the bottom of the rail on it. To revoke a passkey, remove its entry from `.2brain/passkeys.json`. Sessions are signed with `AUTH_SECRET` if you set one, otherwise with a key derived from `GITHUB_TOKEN` (changing the token signs every device out). Passkeys belong to the site's address, so a passkey made on the production domain does not work on Vercel preview URLs.
+Passkeys sync across your devices through iCloud Keychain, Google Password Manager or your password manager; on another computer the browser can also use your phone's passkey by scanning a QR code. For a device whose passkeys do not sync, sign in there with the user name and key and make a passkey, or use **Add device** at the bottom of the rail. To revoke a passkey, remove its entry from `.2brain/passkeys.json`. Sessions are signed with `AUTH_SECRET` if you set one, otherwise with a key derived from `GITHUB_TOKEN`; changing either signs every device out. Passkeys belong to the site's address, so a passkey made on the production domain does not work on Vercel preview URLs; sign in there with the user name and key.
 
 A note is read like this:
 
