@@ -5,10 +5,12 @@
  *   whole wiki can be read from it offline.
  * - The app's code, fonts, icons and the anatomy atlas: from here first; they are
  *   versioned or rarely change.
- * - Everything that writes or asks (POST, /api/…): always the network.
+ * - Everything that writes or asks (POST, /api/…) and the sign-in page: always the network.
+ * - Signing out deletes the kept pages; a page that answers with a redirect (signed out)
+ *   is never kept.
  */
 
-const VERSION = "v1";
+const VERSION = "v2";
 const PAGES = `2brain-pages-${VERSION}`;
 const ASSETS = `2brain-assets-${VERSION}`;
 const SHELL = ["/", "/anatomy/atlas.bin", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
@@ -21,7 +23,8 @@ self.addEventListener("install", (event) => {
       const assets = await caches.open(ASSETS);
       try {
         const res = await fetch("/", { cache: "no-store" });
-        if (res.ok) {
+        // signed out, the brain answers with the sign-in page: never keep that as the brain
+        if (res.ok && !res.redirected) {
           const html = await res.clone().text();
           await pages.put("/", res);
           const urls = [...new Set([...html.matchAll(/["'(](\/_next\/static\/[^"'()\s]+)["')]/g)].map((m) => m[1]))];
@@ -45,7 +48,8 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-const isPage = (req, url) => req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html") && (url.pathname === "/" || url.pathname.startsWith("/wiki/"));
+// only the brain and its notes are kept for offline reading
+const isPage = (req, url) => (req.mode === "navigate" || (req.headers.get("accept") || "").includes("text/html")) && (url.pathname === "/" || url.pathname.startsWith("/wiki/"));
 const isAsset = (url) => url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/anatomy/") || /\.(png|svg|ico|woff2?|webmanifest)$/.test(url.pathname);
 
 async function pageFirstFromNetwork(req) {
@@ -53,10 +57,10 @@ async function pageFirstFromNetwork(req) {
   const key = new URL(req.url).pathname;
   try {
     const res = await Promise.race([fetch(req), new Promise((_, no) => setTimeout(() => no(new Error("slow")), 4000))]);
-    if (res.ok && res.type === "basic") {
+    if (res.ok && res.type === "basic" && !res.redirected) {
       await cache.put(key, res.clone());
       // the brain itself holds every note: keep it fresh whichever page was opened
-      if (key !== "/" && !(await cache.match("/"))) fetch("/").then((r) => r.ok && cache.put("/", r)).catch(() => {});
+      if (key !== "/" && !(await cache.match("/"))) fetch("/").then((r) => r.ok && !r.redirected && cache.put("/", r)).catch(() => {});
     }
     return res;
   } catch {
@@ -84,6 +88,8 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname.startsWith("/api/") || url.searchParams.has("_rsc") || req.headers.get("RSC")) return;
+  // the sign-in page is always the network's: it must reflect the passkeys there are now
+  if (url.pathname === "/login" || url.pathname.startsWith("/login/")) return;
   if (isPage(req, url)) event.respondWith(pageFirstFromNetwork(req));
   else if (isAsset(url)) event.respondWith(assetFromCache(req));
 });

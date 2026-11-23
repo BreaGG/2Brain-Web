@@ -12,7 +12,8 @@ export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as { step?: string; code?: string; response?: RegistrationResponseJSON; name?: string };
   const { rpID, origin, secure } = relyingParty(req);
   const keys = await loadPasskeys(true);
-  const allowed = keys.length ? await isOwner() : setupCodeOk(body.code);
+  // a signed-in owner (with a passkey or the user name and key) may add one; the very first may also come from the key alone
+  const allowed = (await isOwner()) || (!keys.length && setupCodeOk(body.code));
   if (!allowed) return json(401, { error: keys.length ? "Sign in on a device that has your passkey to add another." : "That setup code is not right." });
 
   if (body.step === "options") {

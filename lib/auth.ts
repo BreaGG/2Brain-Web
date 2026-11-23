@@ -1,5 +1,5 @@
 import "server-only";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { SESSION, SESSION_DAYS, accessKey, accessUser, same, sign, unsign } from "./session";
 import { cookies } from "next/headers";
 import type { AuthenticatorTransportFuture } from "@simplewebauthn/server";
 import { readRepoText, putRepoText } from "./wiki-write";
@@ -8,12 +8,13 @@ import { readRepoText, putRepoText } from "./wiki-write";
  * Who may write: the owner, signed in with a passkey (Face ID, Touch ID, a
  * fingerprint or a security key). The passkeys' public keys live in the wiki
  * repository at .2brain/passkeys.json; a signed, HttpOnly cookie keeps the
- * owner signed in on a device for 30 days.
+ * owner signed in on a device for 15 days. The user name and key from the site's
+ * environment variables (ACCESS_USER, PASSKEY_SETUP_CODE) sign in too, on a device
+ * that has no passkey yet.
  * ─────────────────────────────────────────────────────────────────────────── */
 
-export const SESSION = "2b_session";
+export { SESSION, SESSION_DAYS, sign, unsign } from "./session";
 export const CHALLENGE = "2b_challenge";
-export const SESSION_DAYS = 30;
 const STORE = ".2brain/passkeys.json";
 
 export interface Passkey {
@@ -22,34 +23,6 @@ export interface Passkey {
   transports?: AuthenticatorTransportFuture[];
   name: string;
   createdAt: string;
-}
-
-/** The key cookies are signed with: AUTH_SECRET if set, otherwise derived from the GitHub token the server already holds. */
-function secret() {
-  const base = process.env.AUTH_SECRET || process.env.GITHUB_TOKEN;
-  if (!base) throw new Error("No secret to sign sessions with");
-  return createHash("sha256").update(`2brain-auth:${base}`).digest();
-}
-
-export function sign(payload: object) {
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  const mac = createHmac("sha256", secret()).update(body).digest("base64url");
-  return `${body}.${mac}`;
-}
-
-export function unsign<T extends { exp: number }>(token: string | undefined): T | null {
-  if (!token) return null;
-  const [body, mac] = token.split(".");
-  if (!body || !mac) return null;
-  const want = createHmac("sha256", secret()).update(body).digest();
-  const got = Buffer.from(mac, "base64url");
-  if (got.length !== want.length || !timingSafeEqual(got, want)) return null;
-  try {
-    const p = JSON.parse(Buffer.from(body, "base64url").toString()) as T;
-    return p.exp > Date.now() ? p : null;
-  } catch {
-    return null;
-  }
 }
 
 /** Is this request from the signed-in owner? */
@@ -120,13 +93,18 @@ export async function addPasskey(p: Passkey) {
   cache = { at: Date.now(), list };
 }
 
-/** The one-time code that lets the first passkey be set up. */
+/** The key that lets the first passkey be set up (and, with the user name, signs in without one). */
 export function setupCodeOk(given: unknown) {
-  const wanted = process.env.PASSKEY_SETUP_CODE || process.env.WIKI_WRITE_KEY;
-  if (!wanted || typeof given !== "string" || !given) return false;
-  const a = createHash("sha256").update(given.trim()).digest();
-  const b = createHash("sha256").update(wanted).digest();
-  return timingSafeEqual(a, b);
+  return same(given, accessKey());
 }
 
-export const setupConfigured = () => !!(process.env.PASSKEY_SETUP_CODE || process.env.WIKI_WRITE_KEY);
+export const setupConfigured = () => !!accessKey();
+
+/** Sign-in with the user name and the key, both from the site's environment variables. */
+export const passwordConfigured = () => !!(accessUser() && accessKey());
+export function passwordOk(user: unknown, key: unknown) {
+  // both are always compared, so a wrong user name takes as long as a wrong key
+  const u = same(user, accessUser());
+  const k = same(key, accessKey());
+  return passwordConfigured() && u && k;
+}
